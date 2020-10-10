@@ -18,11 +18,14 @@ public class Grid : MonoBehaviour
     public Vector2 gridWorldSize;
     public float nodeRadius;
     Node[,] grid;
-
+    //
     float nodeDiameter;
     int gridSizeX;
     int gridSizeY;
-
+    public void Start()
+    {
+        RebuildGrid();
+    }
     public void RebuildGrid()
     {
         nodeDiameter = nodeRadius * 2;
@@ -52,13 +55,13 @@ public class Grid : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        Gizmos.DrawCube(transform.position, new Vector3(gridWorldSize.x + 0.2f, 1.2f, gridWorldSize.y + 0.2f));
+        Gizmos.DrawCube(transform.position, new Vector3(gridWorldSize.x + 0.2f, 0.2f, gridWorldSize.y + 0.2f));
         if (grid != null)
         {
             foreach (var node in grid)
             {
                 Gizmos.color = node.walkable ? Color.white : Color.red;
-                Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 1.4f, nodeDiameter - 0.1f));
+                Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.4f, nodeDiameter - 0.1f));
             }
         }
     }
