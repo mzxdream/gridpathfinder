@@ -1,4 +1,5 @@
 ﻿using System;
+using UnityEditor;
 using UnityEngine;
 
 public class Node
@@ -22,9 +23,17 @@ public class Grid : MonoBehaviour
     float nodeDiameter;
     int gridSizeX;
     int gridSizeY;
+
+    bool targetChange;
+    long lastTime;
+    long curTime;
     public void Start()
     {
         RebuildGrid();
+        SceneView.FocusWindowIfItsOpen(typeof(SceneView));
+        UnityEditor.SceneView.beforeSceneGui += OnSceneFunc;
+        targetChange = false;
+        curTime = lastTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
     public void RebuildGrid()
     {
@@ -87,6 +96,52 @@ public class Grid : MonoBehaviour
                 Gizmos.color = Color.black;
                 Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.5f, nodeDiameter - 0.1f));
             }
+        }
+    }
+    void OnSceneFunc(SceneView sceneView)
+    {
+        Event e = Event.current;
+        if (e.type == EventType.MouseDown && e.button == 2)
+        {
+            Vector3 mousePos = e.mousePosition;
+            float ppp = EditorGUIUtility.pixelsPerPoint;
+            mousePos.y = sceneView.camera.pixelHeight - mousePos.y * ppp;
+            mousePos.x *= ppp;
+
+            Ray ray = sceneView.camera.ScreenPointToRay(mousePos);
+            RaycastHit hit;
+            if (Physics.Raycast(ray, out hit))
+            {
+                var target = GameObject.FindGameObjectWithTag("Target");
+                if (target != null)
+                {
+                    target.transform.position = hit.point;
+                    targetChange = true;
+                }
+            }
+            e.Use();
+        }
+    }
+    private void Update()
+    {
+        if (targetChange)
+        {
+            //var players = GameObject.FindGameObjectsWithTag("Player");
+            //foreach (var p in players)
+            //{
+            //    var node = GetNodeFromPos(p.transform.position);
+            //    if (node != null)
+            //    {
+            //        Gizmos.color = Color.green;
+            //        Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.6f, nodeDiameter - 0.1f));
+            //    }
+            //}
+        }
+        curTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        while (lastTime < curTime)
+        {
+            //
+            lastTime += 33;
         }
     }
 }
