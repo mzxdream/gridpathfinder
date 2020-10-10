@@ -27,6 +27,7 @@ public class Grid : MonoBehaviour
     bool targetChange;
     long lastTime;
     long curTime;
+    PathFinder finder;
     public void Start()
     {
         RebuildGrid();
@@ -34,6 +35,7 @@ public class Grid : MonoBehaviour
         UnityEditor.SceneView.beforeSceneGui += OnSceneFunc;
         targetChange = false;
         curTime = lastTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        finder = new PathFinder(grid);
     }
     public void RebuildGrid()
     {
