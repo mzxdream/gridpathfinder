@@ -46,8 +46,12 @@ public class Grid : MonoBehaviour
 
     public Node GetNodeFromPos(Vector3 pos)
     {
+        if (grid == null)
+        {
+            return null;
+        }
         float percentX = Mathf.Clamp01((pos.x - transform.position.x + gridWorldSize.x / 2) / gridWorldSize.x);
-        float percentY = Mathf.Clamp01((pos.y - transform.position.z + gridWorldSize.y / 2) / gridWorldSize.y);
+        float percentY = Mathf.Clamp01((pos.z - transform.position.z + gridWorldSize.y / 2) / gridWorldSize.y);
         int x = Mathf.RoundToInt((gridSizeX - 1) * percentX);
         int y = Mathf.RoundToInt((gridSizeY - 1) * percentY);
         return grid[x, y];
@@ -62,6 +66,26 @@ public class Grid : MonoBehaviour
             {
                 Gizmos.color = node.walkable ? Color.white : Color.red;
                 Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.4f, nodeDiameter - 0.1f));
+            }
+        }
+        var players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (var p in players)
+        {
+            var node = GetNodeFromPos(p.transform.position);
+            if (node != null)
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.6f, nodeDiameter - 0.1f));
+            }
+        }
+        var target = GameObject.FindGameObjectWithTag("Target");
+        if (target != null)
+        {
+            var node = GetNodeFromPos(target.transform.position);
+            if (node != null)
+            {
+                Gizmos.color = Color.black;
+                Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.5f, nodeDiameter - 0.1f));
             }
         }
     }
