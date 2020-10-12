@@ -1,37 +1,100 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
-public class PathNode
+public class PathFinder : MonoBehaviour
 {
-    public int x;
-    public int y;
-    public bool walkable;
-    public Vector3 pos;
-    public PathNode(int _x, int _y, bool _walkable, Vector3 _pos)
+    Grid grid;
+    void RetracePath(Node startNode, Node endNode)
     {
-        x = _x;
-        y = _y;
-        walkable = _walkable;
-        pos = _pos;
-    }
-}
-
-public class PathFinder
-{
-    PathNode[,] nodes;
-    public PathFinder(Node[,] grid)
-    {
-        nodes = new PathNode[grid.GetLength(0), grid.GetLength(1)];
-        for (int x = 0; x < grid.GetLength(0); x++)
+        List<Node> path = new List<Node>();
+        Node currentNode = endNode;
+        while (currentNode != startNode)
         {
-            for (int y = 0; y < grid.GetLength(1); y++)
+            path.Add(currentNode);
+            currentNode = currentNode.parent;
+        }
+        path.Reverse();
+        grid.path = path;
+        UnityEngine.Debug.Log("find path finished");
+    }
+    void FindPath(Node startNode, Node endNode)
+    {
+        List<Node> openSet = new List<Node>();
+        HashSet<Node> closeSet = new HashSet<Node>();
+        openSet.Add(startNode);
+        while (openSet.Count > 0)
+        {
+            Node node = openSet[0];
+            for (int i = 1; i < openSet.Count; i++)
             {
-                var n = grid[x, y];
-                nodes[x, y] = new PathNode(x, y, n.walkable, n.position);
+                if (openSet[i].fcost < node.fcost || (openSet[i].fcost == node.fcost && openSet[i].hcost < node.hcost))
+                {
+                    node = openSet[i];
+                }
+            }
+            openSet.Remove(node);
+            closeSet.Add(node);
+            if (node == endNode)
+            {
+                RetracePath(startNode, endNode);
+                return;
+            }
+            foreach (var neighbour in grid.GetNeighbours(node))
+            {
+                if (!neighbour.walkable || closeSet.Contains(neighbour))
+                {
+                    continue;
+                }
+                int newCost = node.gcost + GetDistance(node, neighbour);
+                if (!openSet.Contains(neighbour) || newCost < neighbour.gcost)
+                {
+                    neighbour.gcost = newCost;
+                    neighbour.hcost = GetDistance(neighbour, endNode);
+                    neighbour.parent = node;
+                    if (!openSet.Contains(neighbour))
+                    {
+                        openSet.Add(neighbour);
+                    }
+                }
             }
         }
     }
-    public void FindPath(Vector3 spos, Vector3 epos, Vector3[] path)
+    int GetDistance(Node snode, Node enode)
     {
+        int x = Mathf.Abs(snode.gridX - enode.gridX);
+        int y = Mathf.Abs(snode.gridY - enode.gridY);
+        if (x > y)
+            return 14 * y + 10 * (x - y);
+        return 14 * x + 10 * (y - x);
+    }
+    public void FindPath()
+    {
+        grid = GetComponent<Grid>();
+        if (!grid)
+        {
+            return;
+        }
+        grid.path = new List<Node>();
+        var target = GameObject.FindGameObjectWithTag("Target");
+        if (target == null)
+        {
+            return;
+        }
+        var endNode = grid.GetNodeFromPos(target.transform.position);
+        if (endNode == null)
+        {
+            return;
+        }
+        var players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (var p in players)
+        {
+            var startNode = grid.GetNodeFromPos(p.transform.position);
+            if (startNode != null)
+            {
+                FindPath(startNode, endNode);
+            }
+        }
     }
 }
