@@ -1,13 +1,22 @@
 ﻿using System;
 using UnityEditor;
 using UnityEngine;
+using System.Collections.Generic;
 
 public class Node
 {
+    public int gridX;
+    public int gridY;
     public bool walkable;
     public Vector3 position;
-    public Node(bool _walkable, Vector3 _pos)
+    public int gcost;
+    public int hcost;
+    public int fcost { get { return gcost + hcost; } }
+    public Node parent;
+    public Node(int x, int y, bool _walkable, Vector3 _pos)
     {
+        gridX = x;
+        gridY = y;
         walkable = _walkable;
         position = _pos;
     }
@@ -15,30 +24,17 @@ public class Node
 
 public class Grid : MonoBehaviour
 {
-    public LayerMask unwalkableMask;
-    public Vector2 gridWorldSize;
-    public float nodeRadius;
+    Vector2 gridWorldSize;
     Node[,] grid;
     //
     float nodeDiameter;
     int gridSizeX;
     int gridSizeY;
+    public List<Node> path;
 
-    bool targetChange;
-    long lastTime;
-    long curTime;
-    PathFinder finder;
-    public void Start()
+    public void RebuildGrid(LayerMask unwalkableMask, Vector2 size, float nodeRadius)
     {
-        RebuildGrid();
-        SceneView.FocusWindowIfItsOpen(typeof(SceneView));
-        UnityEditor.SceneView.beforeSceneGui += OnSceneFunc;
-        targetChange = false;
-        curTime = lastTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        finder = new PathFinder(grid);
-    }
-    public void RebuildGrid()
-    {
+        gridWorldSize = new Vector2(size.x, size.y);
         nodeDiameter = nodeRadius * 2;
         gridSizeX = Mathf.RoundToInt(gridWorldSize.x / nodeDiameter);
         gridSizeY = Mathf.RoundToInt(gridWorldSize.y / nodeDiameter);
@@ -50,7 +46,7 @@ public class Grid : MonoBehaviour
             {
                 Vector3 pos = worldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) + Vector3.forward * (y * nodeDiameter + nodeRadius);
                 bool walkable = !Physics.CheckSphere(pos, nodeRadius, unwalkableMask);
-                grid[x, y] = new Node(walkable, pos);
+                grid[x, y] = new Node(x, y, walkable, pos);
             }
         }
     }
@@ -67,6 +63,20 @@ public class Grid : MonoBehaviour
         int y = Mathf.RoundToInt((gridSizeY - 1) * percentY);
         return grid[x, y];
     }
+    public List<Node> GetNeighbours(Node node)
+    {
+        List<Node> nodes = new List<Node>();
+        for (int x = -1; x <= 1; x++)
+            for (int y = -1; y <= 1; y++)
+            {
+                if (x == 0 && y == 0) continue;
+                int checkX = node.gridX + x;
+                int checkY = node.gridY + y;
+                if (checkX < 0 || checkX >= gridSizeX || checkY < 0 || checkY >= gridSizeY) continue;
+                nodes.Add(grid[checkX, checkY]);
+            }
+        return nodes;
+    }
 
     private void OnDrawGizmos()
     {
@@ -76,6 +86,10 @@ public class Grid : MonoBehaviour
             foreach (var node in grid)
             {
                 Gizmos.color = node.walkable ? Color.white : Color.red;
+                if (path != null && path.Contains(node))
+                {
+                    Gizmos.color = Color.gray;
+                }
                 Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.4f, nodeDiameter - 0.1f));
             }
         }
@@ -98,52 +112,6 @@ public class Grid : MonoBehaviour
                 Gizmos.color = Color.black;
                 Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.5f, nodeDiameter - 0.1f));
             }
-        }
-    }
-    void OnSceneFunc(SceneView sceneView)
-    {
-        Event e = Event.current;
-        if (e.type == EventType.MouseDown && e.button == 2)
-        {
-            Vector3 mousePos = e.mousePosition;
-            float ppp = EditorGUIUtility.pixelsPerPoint;
-            mousePos.y = sceneView.camera.pixelHeight - mousePos.y * ppp;
-            mousePos.x *= ppp;
-
-            Ray ray = sceneView.camera.ScreenPointToRay(mousePos);
-            RaycastHit hit;
-            if (Physics.Raycast(ray, out hit))
-            {
-                var target = GameObject.FindGameObjectWithTag("Target");
-                if (target != null)
-                {
-                    target.transform.position = hit.point;
-                    targetChange = true;
-                }
-            }
-            e.Use();
-        }
-    }
-    private void Update()
-    {
-        if (targetChange)
-        {
-            //var players = GameObject.FindGameObjectsWithTag("Player");
-            //foreach (var p in players)
-            //{
-            //    var node = GetNodeFromPos(p.transform.position);
-            //    if (node != null)
-            //    {
-            //        Gizmos.color = Color.green;
-            //        Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.6f, nodeDiameter - 0.1f));
-            //    }
-            //}
-        }
-        curTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        while (lastTime < curTime)
-        {
-            //
-            lastTime += 33;
         }
     }
 }

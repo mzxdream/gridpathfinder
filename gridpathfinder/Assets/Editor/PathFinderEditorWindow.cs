@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
+using UnityEditor.UIElements;
 
 public class PathFinderEditorWindow : EditorWindow
 {
-    LayerMask unwalkableMask = new LayerMask();
-    Vector2 gridWorldSize = new Vector2();
-    float nodeRadius;
+    LayerMask unwalkableMask = 256;
+    Vector2 gridWorldSize = new Vector2(50, 50);
+    float nodeRadius = 0.5f;
 
     [MenuItem("Tools/寻路")]
     public static void ShowWindow()
@@ -69,7 +70,22 @@ public class PathFinderEditorWindow : EditorWindow
                 var obj = UnityEngine.Object.FindObjectOfType<Grid>();
                 if (obj != null)
                 {
-                    obj.GetComponent<Grid>().RebuildGrid();
+                    obj.GetComponent<Grid>().RebuildGrid(unwalkableMask, gridWorldSize, nodeRadius);
+                }
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+        }
+        DrawUILine();
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("寻路", GUILayout.Width(70)))
+            {
+                var obj = UnityEngine.Object.FindObjectOfType<PathFinder>();
+                if (obj != null)
+                {
+                    obj.GetComponent<PathFinder>().FindPath();
                 }
             }
             GUILayout.FlexibleSpace();
