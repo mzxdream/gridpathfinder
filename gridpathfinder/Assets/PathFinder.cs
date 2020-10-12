@@ -6,6 +6,23 @@ using UnityEngine;
 public class PathFinder : MonoBehaviour
 {
     Grid grid;
+    List<Node> SmoothPath(List<Node> path)
+    {
+        List<Node> waypoints = new List<Node>();
+        waypoints.Add(path[0]);
+        Vector2 oldDirection = new Vector2(path[0].gridX - path[1].gridX, path[0].gridY - path[1].gridY);
+        for (int i = 2; i < path.Count; i++)
+        {
+            Vector2 newDirection = new Vector2(path[i - 1].gridX - path[i].gridX, path[i - 1].gridY - path[i].gridY);
+            if (oldDirection != newDirection)
+            {
+                waypoints.Add(path[i - 1]);
+                oldDirection = newDirection;
+            }
+        }
+        waypoints.Add(path[path.Count - 1]);
+        return waypoints;
+    }
     void RetracePath(Node startNode, Node endNode)
     {
         List<Node> path = new List<Node>();
@@ -15,6 +32,8 @@ public class PathFinder : MonoBehaviour
             path.Add(currentNode);
             currentNode = currentNode.parent;
         }
+        path.Add(startNode);
+        path = SmoothPath(path);
         path.Reverse();
         grid.path = path;
         UnityEngine.Debug.Log("find path finished");

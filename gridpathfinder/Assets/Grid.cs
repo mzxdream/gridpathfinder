@@ -93,6 +93,14 @@ public class Grid : MonoBehaviour
                 Gizmos.DrawCube(node.position, new Vector3(nodeDiameter - 0.1f, 0.4f, nodeDiameter - 0.1f));
             }
         }
+        if (path != null)
+        {
+            Gizmos.color = Color.blue;
+            for (int i = 1; i < path.Count; i++)
+            {
+                Gizmos.DrawLine(path[i - 1].position + Vector3.up, path[i].position + Vector3.up);
+            }
+        }
         var players = GameObject.FindGameObjectsWithTag("Player");
         foreach (var p in players)
         {
