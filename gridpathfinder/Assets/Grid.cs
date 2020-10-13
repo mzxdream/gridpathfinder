@@ -63,6 +63,14 @@ public class Grid : MonoBehaviour
         int y = Mathf.RoundToInt((gridSizeY - 1) * percentY);
         return grid[x, y];
     }
+    public Node GetNode(int x, int y)
+    {
+        if (grid == null)
+        {
+            return null;
+        }
+        return grid[x, y];
+    }
     public List<Node> GetNeighbours(Node node)
     {
         List<Node> nodes = new List<Node>();
