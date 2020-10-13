@@ -1,11 +1,74 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using TMPro;
 using UnityEngine;
 
 public class PathFinder : MonoBehaviour
 {
     Grid grid;
+    int unitSize;
+    bool CheckNodeWalkable(Node snode, Node enode)
+    {
+        int signX = enode.gridX > snode.gridX ? 1 : -1;
+        int signY = enode.gridY > snode.gridY ? 1 : -1;
+        if (snode.gridX != enode.gridX)
+        {
+            if (snode.gridY != enode.gridY)
+            {
+                int ex = snode.gridX + signX * unitSize;
+                int ey = snode.gridY + signY * unitSize;
+                if (!grid.GetNode(ex, ey).walkable)
+                {
+                    return false;
+                }
+                int n = Math.Max(1, 2 * unitSize - 2);
+                for (int i = n; i > 0; i--)
+                {
+                    if (!grid.GetNode(ex - i * signX, ey).walkable)
+                    {
+                        return false;
+                    }
+                }
+                for (int i = n; i > 0; i--)
+                {
+                    if (!grid.GetNode(ex, ey - i * signY).walkable)
+                    {
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                int ex = snode.gridX + unitSize * signX;
+                int ey1 = snode.gridY - (unitSize - 1);
+                int ey2 = snode.gridY + (unitSize - 1);
+                for (int i = ey1; i <= ey2; i++)
+                {
+                    var n = grid.GetNode(ex, i);
+                    if (!n.walkable)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        else
+        {
+            int ex1 = snode.gridX - (unitSize - 1);
+            int ex2 = snode.gridX + (unitSize - 1);
+            int ey = snode.gridY + unitSize * signY;
+            for (int i = ex1; i <= ex2; i++)
+            {
+                var n = grid.GetNode(i, ey);
+                if (!n.walkable)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
     bool CheckCrossWalkable(Node snode, Node enode)
     {
         var px = snode.gridX;
@@ -26,9 +89,7 @@ public class PathFinder : MonoBehaviour
                 py += signY;
                 ix++;
                 iy++;
-                if (!grid.GetNode(px, py).walkable
-                    || !grid.GetNode(px - signX, py).walkable
-                    || !grid.GetNode(px, py - signY).walkable)
+                if (!CheckNodeWalkable(grid.GetNode(px - signX, py - signY), grid.GetNode(px, py)))
                 {
                     return false;
                 }
@@ -37,7 +98,7 @@ public class PathFinder : MonoBehaviour
             {
                 px += signX;
                 ix++;
-                if (!grid.GetNode(px, py).walkable)
+                if (!CheckNodeWalkable(grid.GetNode(px - signX, py), grid.GetNode(px, py)))
                 {
                     return false;
                 }
@@ -46,7 +107,7 @@ public class PathFinder : MonoBehaviour
             {
                 py += signY;
                 iy++;
-                if (!grid.GetNode(px, py).walkable)
+                if (!CheckNodeWalkable(grid.GetNode(px, py - signY), grid.GetNode(px, py)))
                 {
                     return false;
                 }
@@ -131,10 +192,7 @@ public class PathFinder : MonoBehaviour
             }
             foreach (var neighbour in grid.GetNeighbours(node))
             {
-                if (!neighbour.walkable
-                    || !grid.GetNode(node.gridX, neighbour.gridY).walkable
-                    || !grid.GetNode(neighbour.gridX, node.gridY).walkable
-                    || closeSet.Contains(neighbour))
+                if (!CheckNodeWalkable(node, neighbour) || closeSet.Contains(neighbour))
                 {
                     continue;
                 }
@@ -160,8 +218,9 @@ public class PathFinder : MonoBehaviour
             return 14 * y + 10 * (x - y);
         return 14 * x + 10 * (y - x);
     }
-    public void FindPath()
+    public void FindPath(int usize)
     {
+        unitSize = usize;
         grid = GetComponent<Grid>();
         if (!grid)
         {
