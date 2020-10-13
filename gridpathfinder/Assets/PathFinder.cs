@@ -8,7 +8,51 @@ public class PathFinder : MonoBehaviour
     Grid grid;
     bool CheckCrossWalkable(Node snode, Node enode)
     {
-        return false;
+        var px = snode.gridX;
+        var py = snode.gridY;
+        var qx = enode.gridX;
+        var qy = enode.gridY;
+        var dx = qx - px;
+        var dy = qy - py;
+        var nx = Math.Abs(dx);
+        var ny = Math.Abs(dy);
+        var signX = dx > 0 ? 1 : -1;
+        var signY = dy > 0 ? 1 : -1;
+        for (int ix = 0, iy = 0; ix < nx || iy < ny;)
+        {
+            if ((1 + 2 * ix) * ny == (1 + 2 * iy) * nx) //对角线
+            {
+                px += signX;
+                py += signY;
+                ix++;
+                iy++;
+                if (!grid.GetNode(px, py).walkable
+                    || !grid.GetNode(px - signX, py).walkable
+                    || !grid.GetNode(px, py - signY).walkable)
+                {
+                    return false;
+                }
+            }
+            else if ((1 + 2 * ix) * ny < (1 + 2 * iy) * nx) //水平
+            {
+                px += signX;
+                ix++;
+                if (!grid.GetNode(px, py).walkable)
+                {
+                    return false;
+                }
+            }
+            else //垂直
+            {
+                py += signY;
+                iy++;
+                if (!grid.GetNode(px, py).walkable)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     List<Node> SmoothPath(List<Node> path)
     {
@@ -41,7 +85,7 @@ public class PathFinder : MonoBehaviour
                     {
                         waypoints.RemoveAt(k);
                     }
-                    i = j;
+                    i = j + 1;
                     break;
                 }
             }
