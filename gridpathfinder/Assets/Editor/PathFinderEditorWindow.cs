@@ -10,6 +10,7 @@ public class PathFinderEditorWindow : EditorWindow
     LayerMask unwalkableMask = 256;
     Vector2 gridWorldSize = new Vector2(50, 50);
     float nodeRadius = 0.5f;
+    int unitSize = 1;
 
     [MenuItem("Tools/寻路")]
     public static void ShowWindow()
@@ -80,12 +81,19 @@ public class PathFinderEditorWindow : EditorWindow
         {
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
+            GUILayout.Label("体型大小:");
+            unitSize = EditorGUILayout.IntField(unitSize);
+            GUILayout.EndHorizontal();
+        }
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
             if (GUILayout.Button("寻路", GUILayout.Width(70)))
             {
                 var obj = UnityEngine.Object.FindObjectOfType<PathFinder>();
                 if (obj != null)
                 {
-                    obj.GetComponent<PathFinder>().FindPath();
+                    obj.GetComponent<PathFinder>().FindPath(unitSize);
                 }
             }
             GUILayout.FlexibleSpace();
