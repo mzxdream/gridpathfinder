@@ -6,9 +6,18 @@ using UnityEngine;
 public class PathFinder : MonoBehaviour
 {
     Grid grid;
+    bool CheckCrossWalkable(Node snode, Node enode)
+    {
+        return false;
+    }
     List<Node> SmoothPath(List<Node> path)
     {
         List<Node> waypoints = new List<Node>();
+        if (path.Count < 2)
+        {
+            return waypoints;
+        }
+        //去除同一直线的点
         waypoints.Add(path[0]);
         Vector2 oldDirection = new Vector2(path[0].gridX - path[1].gridX, path[0].gridY - path[1].gridY);
         for (int i = 2; i < path.Count; i++)
@@ -21,6 +30,22 @@ public class PathFinder : MonoBehaviour
             }
         }
         waypoints.Add(path[path.Count - 1]);
+        //去除拐点
+        for (int i = waypoints.Count - 1; i > 1; i--)
+        {
+            for (int j = 0; j < i - 1; j++)
+            {
+                if (CheckCrossWalkable(waypoints[i], waypoints[j]))
+                {
+                    for (int k = i - 1; k > j; k--)
+                    {
+                        waypoints.RemoveAt(k);
+                    }
+                    i = j;
+                    break;
+                }
+            }
+        }
         return waypoints;
     }
     void RetracePath(Node startNode, Node endNode)
@@ -62,7 +87,10 @@ public class PathFinder : MonoBehaviour
             }
             foreach (var neighbour in grid.GetNeighbours(node))
             {
-                if (!neighbour.walkable || closeSet.Contains(neighbour))
+                if (!neighbour.walkable
+                    || !grid.GetNode(node.gridX, neighbour.gridY).walkable
+                    || !grid.GetNode(neighbour.gridX, node.gridY).walkable
+                    || closeSet.Contains(neighbour))
                 {
                     continue;
                 }
