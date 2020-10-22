@@ -25,11 +25,11 @@ public class PathNode
 
 public class PathGrid
 {
-    Vector3 originPosition;
-    int width;
-    int height;
-    float cellSize;
-    PathNode[,] nodes;
+    private Vector3 originPosition;
+    readonly int width;
+    readonly int height;
+    readonly float cellSize;
+    readonly PathNode[,] nodes;
     public PathGrid(Vector3 originPosition, int width, int height, float cellSize)
     {
         this.originPosition = originPosition;

@@ -4,7 +4,7 @@ using System.Diagnostics;
 using TMPro;
 using UnityEngine;
 
-public class PathFinder : MonoBehaviour
+public class PathFinder
 {
 #if false
     Grid grid;
