@@ -6,6 +6,7 @@ using UnityEngine;
 
 public class PathFinder : MonoBehaviour
 {
+#if false
     Grid grid;
     int unitSize;
     bool CheckNodeWalkable(Node snode, Node enode)
@@ -247,4 +248,5 @@ public class PathFinder : MonoBehaviour
             }
         }
     }
+#endif
 }
