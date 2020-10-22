@@ -433,10 +433,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49bb7b3c55195b640a3282deede9f40d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  width: 3
-  height: 3
-  cellSize: 6
-  walkablePrefab: {fileID: 1998968867159273624, guid: 73ae80c38f4003046b4a4443f6bd66c9,
-    type: 3}
-  unwalkablePrefab: {fileID: 1640852125366725508, guid: e29da04f67ff8194b9c843eadede1333,
+  width: 80
+  height: 40
+  cellSize: 1
+  blockPrefab: {fileID: 1640852125366725508, guid: e29da04f67ff8194b9c843eadede1333,
     type: 3}
