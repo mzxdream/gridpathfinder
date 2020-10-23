@@ -8,4 +8,12 @@ public class PathMathUtils
         var z = pos1.z - pos2.z;
         return x * x + z * z;
     }
+    public static float Mix(float v1, float v2, float a)
+    {
+        return v1 + (v2 - v1) * a;
+    }
+    public static Vector3 MixVec3(Vector3 v1, Vector3 v2, float a)
+    {
+        return v1 + (v2 - v1) * a;
+    }
 }

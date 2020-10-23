@@ -21,7 +21,7 @@ public class PathManager
     {
         return true;
     }
-    public int RequestPath(Unit obj, Vector3 sourcePoint, Vector3 targetPoint, float radius, bool synced)
+    public int RequestPath(Unit obj, MoveDef moveDef, Vector3 sourcePoint, Vector3 targetPoint, float radius, bool synced)
     {
         if (!IsFinalized())
         {
