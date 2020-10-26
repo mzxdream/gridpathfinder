@@ -4,7 +4,7 @@ public class MoveDef
 {
     public int xsize = 1;
     public int zsize = 1;
-    public float radius = 0.5f;
+    //public float radius = 0.5f;
     public float speed = 0.2f; //速度
     public float rSpeed = 0.2f; //反向速度
     public float turnRate = 0.1f; //转向速度
@@ -22,6 +22,17 @@ public class MoveDef
     public bool heatMapping = true;
     public float heatMod = 0.05f;
     public int heatProduced = 30;
+    public float maxAcc = 0.1f;
+    public float maxDec = 0.01f;
+
+    public float CalcFootPrintMinExteriorRadius(float scale = 1.0f)
+    {
+        return ((Mathf.Sqrt(xsize * xsize + zsize * zsize) * 0.5f * Game.SQUARE_SIZE) * scale);
+    }
+    public float CalcFootPrintMaxInteriorRadius(float scale = 1.0f)
+    {
+        return ((Mathf.Max(xsize, zsize) * 0.5f * Game.SQUARE_SIZE) * scale);
+    }
 
     public bool TestMoveSquare(Unit collider, Vector3 testMovePos, Vector3 testMoveDir, bool testTerrian = true, bool testObjects = true, bool centerOnly = false, float[] minSpeedModPtr = null, int[] maxBlockBitPtr = null)
     {
