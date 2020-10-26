@@ -4,6 +4,8 @@ public class MoveDef
 {
     public int xsize = 1;
     public int zsize = 1;
+    public int xsizeh = 0;
+    public int zsizeh = 0;
     //public float radius = 0.5f;
     public float speed = 0.2f; //速度
     public float rSpeed = 0.2f; //反向速度
@@ -37,5 +39,38 @@ public class MoveDef
     public bool TestMoveSquare(Unit collider, Vector3 testMovePos, Vector3 testMoveDir, bool testTerrian = true, bool testObjects = true, bool centerOnly = false, float[] minSpeedModPtr = null, int[] maxBlockBitPtr = null)
     {
         return true;
+    }
+    public bool TestMoveSquareRange(Unit collider, Vector3 rangeMins, Vector3 rangeMaxs, Vector3 testMoveDir, bool testTerrain, bool testObjects, bool centerOnly, ref float minSpeedModPtr, ref int maxBlockBitPtr)
+    {
+        int xmin = (int)(rangeMins.x / Game.SQUARE_SIZE) - xsizeh * (1 - (centerOnly ? 1 : 0));
+        int zmin = (int)(rangeMins.z / Game.SQUARE_SIZE) - zsizeh * (1 - (centerOnly ? 1 : 0));
+        int xmax = (int)(rangeMaxs.x / Game.SQUARE_SIZE) + xsizeh * (1 - (centerOnly ? 1 : 0));
+        int zmax = (int)(rangeMaxs.z / Game.SQUARE_SIZE) + zsizeh * (1 - (centerOnly ? 1 : 0));
+        Vector3 testMoveDir2D = new Vector3(testMoveDir.x, 0, testMoveDir.z).normalized;
+        float minSpeedMod = float.MaxValue;
+        int maxBlockBit = (int)PathMathUtils.BlockTypes.BLOCK_NONE;
+        bool retTestMove = true;
+
+        for (int z = zmin; retTestMove && z <= zmax; z += 1)
+        {
+            for (int x = xmin; retTestMove && x <= xmax; x += 1)
+            {
+                float speedMod = 1.0f;
+                minSpeedMod = Mathf.Min(minSpeedMod, speedMod);
+                retTestMove &= (!testTerrain || (speedMod > 0.0f));
+            }
+        }
+        // GetPosSpeedMod only checks *one* square of terrain
+        // (heightmap/slopemap/typemap), not the blocking-map
+        if (retTestMove)
+        {
+            var blockBits = PathMathUtils.RangeIsBlocked(this, xmin, xmax, zmin, zmax, collider);
+            maxBlockBit |= blockBits;
+            retTestMove &= (!testObjects || (blockBits & (int)PathMathUtils.BlockTypes.BLOCK_STRUCTURE) == 0);
+        }
+        // don't use std::min or |= because the ptr values might be garbage
+        minSpeedModPtr = minSpeedMod;
+        maxBlockBitPtr = maxBlockBit;
+        return retTestMove;
     }
 }

@@ -37,4 +37,8 @@ public class PathManager
     {
         return Vector3.zero;
     }
+    public bool PathUpdated(int pathID)
+    {
+        return true;
+    }
 }
