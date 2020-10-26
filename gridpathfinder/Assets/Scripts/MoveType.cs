@@ -2,32 +2,31 @@
 
 public class MoveType
 {
-    public const int GAME_SPEED = 30;
-    public const float SQUARE_SIZE = 1f;
-    public const float WAYPOINT_RADIUS = 1.25f * SQUARE_SIZE;
-
+    public const float WAYPOINT_RADIUS = 1.25f * Game.SQUARE_SIZE;
+    //AMoveType begin
     public Unit owner;
     public Vector3 goalPos;
-    public Vector3 oldPos;
-    public Vector3 oldSlowUpdatePos;
+    public Vector3 oldPos; // owner position at last Update()
+    public Vector3 oldSlowUpdatePos; // owner position at last SlowUpdate()
     public enum ProgressState { Done, Active, Failed };
     public ProgressState progressState = ProgressState.Done;
-    private float maxSpeed;
-    private float maxWantedSpeed;
+    private float maxSpeed; // current maximum speed owner is allowed to reach
+    private float maxWantedSpeed; // maximum speed (temporarily) set by a CommandA
     //private float maneuverLeash;
-    private bool useHeading = true;
+    //private bool useHeading = true;
 
+    //CGroudMoveType
     PathController pathController;
     Vector3 currWayPoint;
     Vector3 nextWayPoint;
     Vector3 waypointDir;
     Vector3 flatFrontDir;
     Vector3 lastAvoidanceDir;
-    Vector3 mainHeadingPos;
-    //Vector3 skidRotVector;
-    float turnRate = 0.1f;
-    float turnSpeed = 0f;
-    float turnAccel = 0f;
+    //Vector3 mainHeadingPos;
+    //Vector3 skidRotVector;  /// vector orthogonal to skidDi
+    float turnRate = 0.1f;  /// maximum angular speed (angular units/frame)
+    float turnSpeed = 0f;   /// current angular speed (angular units/frame)
+    float turnAccel = 0f;   /// angular acceleration (angular units/frame^2)
     float accRate = 0.01f;
     float decRate = 0.01f;
     //float myGravity = 0.0f;
@@ -35,7 +34,7 @@ public class MoveType
     float maxReverseDist = 0.0f;
     float minReverseAngle = 0.0f;
     float maxReverseSpeed = 0.0f;
-    float sqSkidSpeedMult = 0.95f;
+    //float sqSkidSpeedMult = 0.95f;
 
     float wantedSpeed = 0.0f;
     float currentSpeed = 0.0f;
@@ -52,7 +51,7 @@ public class MoveType
     //float skidRotAccel = 0.0f;              /// rotational acceleration when skidding (radians / (GAME_SPEED frames^2))
 
     int pathID = 0;
-    //int nextObstacleAvoidanceFrame = 0;
+    int nextObstacleAvoidanceFrame = 0;
 
     int numIdlingUpdates = 0;      /// {in, de}creased every Update if idling is true/false and pathId != 0
 	int numIdlingSlowUpdates = 0;  /// {in, de}creased every SlowUpdate if idling is true/false and pathId != 0
@@ -68,28 +67,30 @@ public class MoveType
     bool idling = false;
     bool pushResistant = false;
     bool canReverse = false;
-    bool useMainHeading = false;            /// if true, turn toward mainHeadingPos until weapons[0] can TryTarget() it
+    //bool useMainHeading = false;            /// if true, turn toward mainHeadingPos until weapons[0] can TryTarget() it
     public MoveType(Unit owner)
     {
         this.owner = owner;
         goalPos = owner.pos;
         oldPos = owner.pos;
         oldSlowUpdatePos = oldPos;
-        maxSpeed = owner.moveDef.speed / GAME_SPEED;
-        maxWantedSpeed = owner.moveDef.speed / GAME_SPEED;
+        maxSpeed = owner.moveDef.speed / Game.GAME_SPEED;
+        maxWantedSpeed = owner.moveDef.speed / Game.GAME_SPEED;
+
         pathController = new PathController(owner);
         currWayPoint = Vector3.zero;
         nextWayPoint = Vector3.zero;
-        flatFrontDir = Vector3.right;
+        flatFrontDir = Vector3.forward;
         lastAvoidanceDir = Vector3.zero;
-        mainHeadingPos = Vector3.zero;
         wantedHeading = 0;
         pushResistant = owner.moveDef.pushResistant;
         canReverse = owner.moveDef.rSpeed > 0f;
-        maxReverseSpeed = owner.moveDef.rSpeed / GAME_SPEED;
-        turnRate = Mathf.Clamp(owner.moveDef.turnRate, 1.0f, 32768.0f);
+        maxReverseSpeed = owner.moveDef.rSpeed / Game.GAME_SPEED;
+        turnRate = Mathf.Clamp(owner.moveDef.turnRate, 1.0f, 32767.0f);
         turnAccel = turnRate * 0.333f;
-        ownerRadius = owner.moveDef.radius;
+        accRate = Mathf.Max(0.01f, owner.moveDef.maxAcc);
+        decRate = Mathf.Max(0.01f, owner.moveDef.maxDec);
+        ownerRadius = owner.moveDef.CalcFootPrintMinExteriorRadius();
     }
     public void StartMoving(Vector3 moveGoalPos, float moveGoalRadius)
     {
@@ -98,10 +99,9 @@ public class MoveType
         goalRadius = moveGoalRadius;
         extraRadius = owner.moveDef.TestMoveSquare(null, moveGoalPos, Vector3.zero, true, true) ? 0 : deltaRaidus;
 
-        atGoal = PathMathUtils.SqrDistance2D(owner.pos, moveGoalPos) < (goalRadius + extraRadius) * (goalRadius + extraRadius);
+        atGoal = PathMathUtils.SqrDistance2D(owner.pos, moveGoalPos) < PathMathUtils.Square(goalRadius + extraRadius);
         atEndOfPath = false;
 
-        useMainHeading = false;
         progressState = ProgressState.Active;
 
         numIdlingUpdates = 0;
@@ -137,7 +137,7 @@ public class MoveType
         {
             PathManager.Instance().UpdatePath(owner, pathID);
         }
-        //nextObstacleAvoidanceFrame = 0;
+        nextObstacleAvoidanceFrame = Game.frameNum;
     }
     public void StopEngine(bool hardStop = false)
     {
