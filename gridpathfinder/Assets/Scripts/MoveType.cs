@@ -162,7 +162,7 @@ public class MoveType
     public int GetNewPath()
     {
         int newPathID = 0;
-        if (PathMathUtils.SqrDistance2D(owner.pos, goalPos) <= (goalRadius + extraRadius) * (goalRadius + extraRadius))
+        if (PathMathUtils.SqrDistance2D(owner.pos, goalPos) <= PathMathUtils.Square(goalRadius + extraRadius))
         {
             return newPathID;
         }
@@ -171,7 +171,7 @@ public class MoveType
         {
             atGoal = false;
             atEndOfPath = false;
-            currWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0, owner.pos, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
+            currWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0,    owner.pos, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
             nextWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0, currWayPoint, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
 
             pathController.SetRealGoalPosition(newPathID, goalPos);
