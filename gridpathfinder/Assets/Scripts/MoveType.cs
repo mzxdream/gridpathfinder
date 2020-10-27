@@ -528,121 +528,64 @@ public class MoveType
         // now we do the obstacle avoidance proper
         // avoider always uses its never-rotated MoveDef footprint
         // note: should increase radius for smaller turnAccel values
-        const float avoidanceRadius = std::max(currentSpeed, 1.0f) * (avoider->radius * 2.0f);
-        const float avoiderRadius = avoiderMD->CalcFootPrintMinExteriorRadius();
+        float avoidanceRadius = Mathf.Max(currentSpeed, 1.0f) * (avoider.radius * 2.0f);
+        float avoiderRadius = avoiderMD.CalcFootPrintMinExteriorRadius();
 
-	QuadFieldQuery qfQuery;
-	quadField.GetSolidsExact(qfQuery, avoider->pos, avoidanceRadius, 0xFFFFFFFF, CSolidObject::CSTATE_BIT_SOLIDOBJECTS);
+        QuadFieldQuery qfQuery = new QuadFieldQuery();
+        QuadField.Instance().GetSolidsExact(qfQuery, avoider.pos, avoidanceRadius);
 
-	for (const CSolidObject* avoidee: *qfQuery.solids) {
-		const MoveDef* avoideeMD = avoidee->moveDef;
-		const UnitDef* avoideeUD = dynamic_cast<const UnitDef*>(avoidee->GetDef());
+        foreach (var avoidee in qfQuery.units)
+        {
+            MoveDef avoideeMD = avoidee.moveDef;
+            if (avoidee == owner)
+                continue;
+            bool avoideeMobile = true;
+            bool avoideeMovable = !avoideeMD.pushResistant;
+            Vector3 avoideeVector = (avoider.pos + avoider.speed) - (avoidee.pos + avoidee.speed);
+            // use the avoidee's MoveDef footprint as radius if it is mobile
+            // use the avoidee's Unit (not UnitDef) footprint as radius otherwise
+            float avoideeRadius = avoideeMD.CalcFootPrintMinExteriorRadius();
+            float avoidanceRadiusSum = avoiderRadius + avoideeRadius;
+            float avoidanceMassSum = avoider.mass + avoidee.mass;
+            float avoideeMassScale = avoidee.mass / avoidanceMassSum;
+            float avoideeDistSq = avoideeVector.sqrMagnitude;
+            float avoideeDist = Mathf.Sqrt(avoideeDistSq) + 0.01f;
+            // do not bother steering around idling MOBILE objects
+            // (since collision handling will just push them aside)
+            if (avoideeMovable)
+            {
+                if (!avoiderMD.avoidMobilesOnPath || (!avoidee.moving && avoidee.allyteam == avoider.allyteam))
+                    continue;
+            }
+            // ignore objects that are more than this many degrees off-center from us
+            // NOTE:
+            //   if MAX_AVOIDEE_COSINE is too small, then this condition can be true
+            //   one frame and false the next (after avoider has turned) causing the
+            //   avoidance vector to oscillate --> units with turnInPlace = true will
+            //   slow to a crawl as a result
+            if (Vector3.Dot(avoider.frontdir, -(avoideeVector / avoideeDist)) < MAX_AVOIDEE_COSINE)
+                continue;
+            if (avoideeDistSq >= PathMathUtils.Square(Mathf.Max(currentSpeed, 1.0f) * Game.GAME_SPEED + avoidanceRadiusSum))
+                continue;
+            if (avoideeDistSq >= PathMathUtils.SqrDistance2D(avoider.pos, goalPos))
+                continue;
+            float avoiderTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoidee.pos, avoider.rightdir) - Vector3.Dot(avoider.pos, avoider.rightdir));
+            float avoideeTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoider.pos, avoidee.rightdir) - Vector3.Dot(avoidee.pos, avoidee.rightdir));
 
-		// cases in which there is no need to avoid this obstacle
-		if (avoidee == owner)
-			continue;
-		// do not avoid statics (it interferes too much with PFS)
-		if (avoideeMD == nullptr)
-			continue;
-		// ignore aircraft (or flying ground units)
-		if (avoidee->IsInAir() || avoidee->IsFlying())
-			continue;
-		if (CMoveMath::IsNonBlocking(*avoiderMD, avoidee, avoider))
-			continue;
-		if (!CMoveMath::CrushResistant(*avoiderMD, avoidee))
-			continue;
-
-		const bool avoideeMobile  = (avoideeMD != nullptr);
-		const bool avoideeMovable = (avoideeUD != nullptr && !static_cast<const CUnit*>(avoidee)->moveType->IsPushResistant());
-
-		const float3 avoideeVector = (avoider->pos + avoider->speed) - (avoidee->pos + avoidee->speed);
-
-		// use the avoidee's MoveDef footprint as radius if it is mobile
-		// use the avoidee's Unit (not UnitDef) footprint as radius otherwise
-		const float avoideeRadius = avoideeMobile?
-			avoideeMD->CalcFootPrintMinExteriorRadius():
-			avoidee->CalcFootPrintMinExteriorRadius();
-		const float avoidanceRadiusSum = avoiderRadius + avoideeRadius;
-		const float avoidanceMassSum = avoider->mass + avoidee->mass;
-		const float avoideeMassScale = avoideeMobile? (avoidee->mass / avoidanceMassSum): 1.0f;
-		const float avoideeDistSq = avoideeVector.SqLength();
-		const float avoideeDist   = math::sqrt(avoideeDistSq) + 0.01f;
-
-		// do not bother steering around idling MOBILE objects
-		// (since collision handling will just push them aside)
-		if (avoideeMobile && avoideeMovable) {
-			if (!avoiderMD->avoidMobilesOnPath || (!avoidee->IsMoving() && avoidee->allyteam == avoider->allyteam))
-				continue;
-		}
-
-		// ignore objects that are more than this many degrees off-center from us
-		// NOTE:
-		//   if MAX_AVOIDEE_COSINE is too small, then this condition can be true
-		//   one frame and false the next (after avoider has turned) causing the
-		//   avoidance vector to oscillate --> units with turnInPlace = true will
-		//   slow to a crawl as a result
-		if (avoider->frontdir.dot(-(avoideeVector / avoideeDist)) < MAX_AVOIDEE_COSINE)
-			continue;
-
-		if (avoideeDistSq >= Square(std::max(currentSpeed, 1.0f) * GAME_SPEED + avoidanceRadiusSum))
-			continue;
-		if (avoideeDistSq >= avoider->pos.SqDistance2D(goalPos))
-			continue;
-
-		// if object and unit in relative motion are closing in on one another
-		// (or not yet fully apart), then the object is on the path of the unit
-		// and they are not collided
-		if (DEBUG_DRAWING_ENABLED) {
-			if (selectedUnitsHandler.selectedUnits.find(owner->id) != selectedUnitsHandler.selectedUnits.end())
-				geometricObjects->AddLine(avoider->pos + (UpVector * 20.0f), avoidee->pos + (UpVector * 20.0f), 3, 1, 4);
-		}
-
-		float avoiderTurnSign = -Sign(avoidee->pos.dot(avoider->rightdir) - avoider->pos.dot(avoider->rightdir));
-		float avoideeTurnSign = -Sign(avoider->pos.dot(avoidee->rightdir) - avoidee->pos.dot(avoidee->rightdir));
-
-		// for mobile units, avoidance-response is modulated by angle
-		// between avoidee's and avoider's frontdir such that maximal
-		// avoidance occurs when they are anti-parallel
-		const float avoidanceCosAngle = Clamp(avoider->frontdir.dot(avoidee->frontdir), -1.0f, 1.0f);
-		const float avoidanceResponse = (1.0f - avoidanceCosAngle * int(avoideeMobile)) + 0.1f;
-		const float avoidanceFallOff  = (1.0f - std::min(1.0f, avoideeDist / (5.0f * avoidanceRadiusSum)));
-
-		// if parties are anti-parallel, it is always more efficient for
-		// both to turn in the same local-space direction (either R/R or
-		// L/L depending on relative object positions) but there exists
-		// a range of orientations for which the signs are not equal
-		//
-		// (this is also true for the parallel situation, but there the
-		// degeneracy only occurs when one of the parties is behind the
-		// other and can be ignored)
-		if (avoidanceCosAngle < 0.0f)
-			avoiderTurnSign = std::max(avoiderTurnSign, avoideeTurnSign);
-
-		avoidanceDir = avoider->rightdir * AVOIDER_DIR_WEIGHT * avoiderTurnSign;
-		avoidanceVec += (avoidanceDir * avoidanceResponse * avoidanceFallOff * avoideeMassScale);
-	}
-
-
-	// use a weighted combination of the desired- and the avoidance-directions
-	// also linearly smooth it using the vector calculated the previous frame
-	avoidanceDir = (mix(desiredDir, avoidanceVec, DESIRED_DIR_WEIGHT)).SafeNormalize();
-	avoidanceDir = (mix(avoidanceDir, lastAvoidanceDir, LAST_DIR_MIX_ALPHA)).SafeNormalize();
-
-	if (DEBUG_DRAWING_ENABLED) {
-		if (selectedUnitsHandler.selectedUnits.find(owner->id) != selectedUnitsHandler.selectedUnits.end()) {
-			const float3 p0 = owner->pos + (    UpVector * 20.0f);
-			const float3 p1 =         p0 + (avoidanceVec * 40.0f);
-			const float3 p2 =         p0 + (avoidanceDir * 40.0f);
-
-			const int avFigGroupID = geometricObjects->AddLine(p0, p1, 8.0f, 1, 4);
-			const int adFigGroupID = geometricObjects->AddLine(p0, p2, 8.0f, 1, 4);
-
-			geometricObjects->SetColor(avFigGroupID, 1, 0.3f, 0.3f, 0.6f);
-			geometricObjects->SetColor(adFigGroupID, 1, 0.3f, 0.3f, 0.6f);
-		}
-	}
-
-	return (lastAvoidanceDir = avoidanceDir);
-}
+            // for mobile units, avoidance-response is modulated by angle
+            // between avoidee's and avoider's frontdir such that maximal
+            // avoidance occurs when they are anti-parallel
+            float avoidanceCosAngle = Mathf.Clamp(Vector3.Dot(avoider.frontdir, avoidee.frontdir), -1.0f, 1.0f);
+            float avoidanceResponse = (1.0f - avoidanceCosAngle) + 0.1f;
+            float avoidanceFallOff = (1.0f - Mathf.Min(1.0f, avoideeDist / (5.0f * avoidanceRadiusSum)));
+            if (avoidanceCosAngle < 0.0f)
+                avoiderTurnSign = Mathf.Max(avoiderTurnSign, avoideeTurnSign);
+            avoidanceDir = avoider.rightdir * AVOIDER_DIR_WEIGHT * avoiderTurnSign;
+            avoidanceVec += (avoidanceDir * avoidanceResponse * avoidanceFallOff * avoideeMassScale);
+        }
+        avoidanceDir = (PathMathUtils.MixVec3(desiredDir, avoidanceVec, DESIRED_DIR_WEIGHT)).normalized;
+        avoidanceDir = (PathMathUtils.MixVec3(avoidanceDir, lastAvoidanceDir, LAST_DIR_MIX_ALPHA)).normalized;
+        return (lastAvoidanceDir = avoidanceDir);
+    }
 
 }
