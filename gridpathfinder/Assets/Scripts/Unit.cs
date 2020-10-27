@@ -5,6 +5,7 @@ using UnityEngine.Timeline;
 public class Unit
 {
     public Vector3 pos;
+    public float radius;//use for collisions
     public Vector3 speed;
     public float speedw;
     public MoveDef moveDef;
@@ -20,6 +21,9 @@ public class Unit
     public Vector3 relAimPos;
     // if the updir is straight up or align to the ground vector
     public bool upright = true;
+    public bool moving = false;
+    public int allyteam = 0;
+    public float mass = 1e5f;
     public Unit()
     {
     }
