@@ -4,19 +4,26 @@ using UnityEngine.Timeline;
 
 public class Unit
 {
+    //world object
+    public Vector3 pos; //对象的中心最低点
+    public Vector3 speed; //当前的速度，elmos/frame
+    public float speedw; //|speed|
+    public float radius;//障碍物半径
+    //solid object
+    public float mass = 1e5f; //质量 默认unitdef->mass
+    public int heading = 0; //朝向 和frontdir一致
+    public int allyteam = 0;
+    public MoveDef moveDef;
+    public Vector3 frontdir = Vector3.forward; //z-axis
+    public Vector3 rightdir = -Vector3.right; //x-axis
+    public Vector3 updir = Vector3.up; //y-axis
+
+
+
+    //unit object
     public UnitDef unitDef;
     public MoveType moveType;
-    public bool stunned = false; //释放技能导致的停止移动
-
-    public Vector3 pos;
-    public float radius;//use for collisions
-    public Vector3 speed;
-    public float speedw;
-    public MoveDef moveDef;
-    public int heading = 0;
-    public Vector3 frontdir = Vector3.forward;
-    public Vector3 rightdir = -Vector3.right;
-    public Vector3 updir = Vector3.up;
+    public bool stunned = false; //晕眩
     public Vector3 midPos;
     public Vector3 aimPos;
     public Vector3 relMidPos;
@@ -25,7 +32,6 @@ public class Unit
     public bool upright = true;
     public bool moving = false;
     public int allyteam = 0;
-    public float mass = 1e5f;
     public Unit()
     {
     }
