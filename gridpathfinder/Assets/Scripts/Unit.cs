@@ -4,13 +4,15 @@ using UnityEngine.Timeline;
 
 public class Unit
 {
+    public UnitDef unitDef;
+    public MoveType moveType;
+    public bool stunned = false; //释放技能导致的停止移动
+
     public Vector3 pos;
     public float radius;//use for collisions
     public Vector3 speed;
     public float speedw;
     public MoveDef moveDef;
-    public MoveType moveType;
-    public bool stunned = false;
     public int heading = 0;
     public Vector3 frontdir = Vector3.forward;
     public Vector3 rightdir = -Vector3.right;

@@ -183,6 +183,14 @@ public class MoveType
         }
         return newPathID;
     }
+    public static Vector3 CalcSpeedVectorExclGravity(Unit owner, MoveType mt, float hAcc)
+    {
+        // LuaSyncedCtrl::SetUnitVelocity directly assigns
+        // to owner->speed which gets overridden below, so
+        // need to calculate hSpeedScale from it (not from
+        // currentSpeed) directly
+        return (owner.frontdir * (owner.speedw + hAcc));
+    }
     public bool Update()
     {
         int heading = owner.heading;
@@ -190,7 +198,7 @@ public class MoveType
         // these must be executed even when stunned (so
         // units do not get buried by restoring terrain)
         UpdateOwnerAccelAndHeading();
-        //UpdateOwnerPos(owner->speed, calcSpeedVectorFuncs[modInfo.allowGroundUnitGravity](owner, this, deltaSpeed, myGravity));
+        UpdateOwnerPos(owner.speed, CalcSpeedVectorExclGravity(owner, this, deltaSpeed));
         //HandleObjectCollisions();
         //AdjustPosToWaterLine();
         //return (OwnerMoved(heading, owner->pos - oldPos, float3(float3::cmp_eps(), float3::cmp_eps() * 1e-2f, float3::cmp_eps())));
