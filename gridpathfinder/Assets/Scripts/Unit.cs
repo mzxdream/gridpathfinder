@@ -8,7 +8,6 @@ public class Unit
     public float speedw; //|speed|
     public float radius;//障碍物半径
     //solid object
-    public float mass = 1e5f; //质量 默认unitdef->mass
     public int heading = 0; //朝向 和frontdir一致
     public int allyteam = 0;
     public MoveDef moveDef;
@@ -18,8 +17,15 @@ public class Unit
     //unit object
     public UnitDef unitDef;
     public MoveType moveType;
-    public Unit()
+    public Unit(Vector3 pos)
     {
+        this.pos = pos;
+        this.speed = Vector3.zero;
+        this.speedw = 0f;
+        this.radius = 16f;
+        this.moveDef = new MoveDef();
+        this.unitDef = new UnitDef();
+        this.moveType = new MoveType(this);
     }
     public void SetVelocityAndSpeed(Vector3 v)
     {

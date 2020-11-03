@@ -17,15 +17,20 @@ public class UnitDef
     public bool isImmobileUnit = false; //不可移动的物体，比如建筑物
     public UnitDef()
     {
-        speed = 3.85f * Game.GAME_SPEED;
-        maxAcc = 1.5f;
-        maxDec = 2.4f;
-        turnRate = 2500f;
-        turnInPlaceSpeedLimit = turnRate / Game.CIRCLE_DIVS;
-        turnInPlaceSpeedLimit *= (Mathf.PI * 2 * Game.SQUARE_SIZE);
-        turnInPlaceSpeedLimit /= Mathf.Max(speed / Game.GAME_SPEED, 1.0f);
-        turnInPlaceSpeedLimit = Mathf.Min(speed, turnInPlaceSpeedLimit);
-        turnInPlaceAngleLimit = 0f;
-        mass = 65f;
+        this.speed = 3.85f * Game.GAME_SPEED;
+        this.maxAcc = 1.5f;
+        this.maxDec = 2.4f;
+        this.turnRate = 3000f;
+        this.turnInPlace = false;
+        //this.turnInPlaceSpeedLimit = this.turnRate / Game.CIRCLE_DIVS;
+        //this.turnInPlaceSpeedLimit *= (Mathf.PI * 2 * Game.SQUARE_SIZE);
+        //this.turnInPlaceSpeedLimit /= Mathf.Max(this.speed / Game.GAME_SPEED, 1.0f);
+        //this.turnInPlaceSpeedLimit = Mathf.Min(this.speed, this.turnInPlaceSpeedLimit);
+        this.turnInPlaceSpeedLimit = 3.85f;
+        this.turnInPlaceAngleLimit = 0f;
+        this.mass = 76.7674408f;
+        this.collidable = true;
+        this.pushResistant = false;
+        this.isImmobileUnit = false;
     }
 }
