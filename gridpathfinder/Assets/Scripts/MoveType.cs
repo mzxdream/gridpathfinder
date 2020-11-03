@@ -1,20 +1,18 @@
-﻿using UnityEngine;
+﻿using System.Globalization;
+using UnityEngine;
 
 public class MoveType
 {
     public const float WAYPOINT_RADIUS = 1.25f * Game.SQUARE_SIZE;
-    //AMoveType begin
+    //AMoveType
     public Unit owner;
     public Vector3 goalPos;
     public Vector3 oldPos; // owner position at last Update()
     public Vector3 oldSlowUpdatePos; // owner position at last SlowUpdate()
     public enum ProgressState { Done, Active, Failed };
     public ProgressState progressState = ProgressState.Done;
-    private float maxSpeed; // current maximum speed owner is allowed to reach
-    private float maxWantedSpeed; // maximum speed (temporarily) set by a CommandA
-    //private float maneuverLeash;
-    //private bool useHeading = true;
-
+    public float maxSpeed; // current maximum speed owner is allowed to reach
+    public float maxWantedSpeed; // maximum speed (temporarily) set by a CommandA
     //CGroudMoveType
     PathController pathController;
     Vector3 currWayPoint;
@@ -22,94 +20,61 @@ public class MoveType
     Vector3 waypointDir;
     Vector3 flatFrontDir;
     Vector3 lastAvoidanceDir;
-    //Vector3 mainHeadingPos;
-    //Vector3 skidRotVector;  /// vector orthogonal to skidDi
     float turnRate = 0.1f;  /// maximum angular speed (angular units/frame)
     float turnSpeed = 0f;   /// current angular speed (angular units/frame)
     float turnAccel = 0f;   /// angular acceleration (angular units/frame^2)
     float accRate = 0.01f;
     float decRate = 0.01f;
-    //float myGravity = 0.0f;
-
-    float maxReverseDist = 0.0f;
-    float minReverseAngle = 0.0f;
-    float maxReverseSpeed = 0.0f;
-    //float sqSkidSpeedMult = 0.95f;
-
     float wantedSpeed = 0.0f;
     float currentSpeed = 0.0f;
     float deltaSpeed = 0.0f;
-
-    float currWayPointDist = 0.0f;
-    float prevWayPointDist = 0.0f;
-
-    float goalRadius = 0.0f;                /// original radius passed to StartMoving*
-	float ownerRadius = 0.0f;               /// owner MoveDef footprint radius
-	float extraRadius = 0.0f;               /// max(0, ownerRadius - goalRadius) if goal-pos is valid, 0 otherwise
-
-    //float skidRotSpeed = 0.0f;              /// rotational speed when skidding (radians / (GAME_SPEED frames))
-    //float skidRotAccel = 0.0f;              /// rotational acceleration when skidding (radians / (GAME_SPEED frames^2))
-
-    int pathID = 0;
-    int nextObstacleAvoidanceFrame = 0;
-
-    int numIdlingUpdates = 0;      /// {in, de}creased every Update if idling is true/false and pathId != 0
-	int numIdlingSlowUpdates = 0;  /// {in, de}creased every SlowUpdate if idling is true/false and pathId != 0
-
-    int wantedHeading = 0;
-    int minScriptChangeHeading = 0;       /// minimum required turn-angle before script->ChangeHeading is called
-
     bool atGoal = false;
     bool atEndOfPath = false;
     bool wantRepath = false;
+    float currWayPointDist = 0.0f;
+    float prevWayPointDist = 0.0f;
+    float goalRadius = 0.0f;                /// original radius passed to StartMoving*
+    int pathID = 0;
+    int nextObstacleAvoidanceFrame = 0;
+    int wantedHeading = 0;
+    bool pushResistant = true;
 
     bool reversing = false;
     bool idling = false;
-    bool pushResistant = false;
-    bool canReverse = false;
-    //bool useMainHeading = false;            /// if true, turn toward mainHeadingPos until weapons[0] can TryTarget() it
+    int numIdlingUpdates = 0;
+    int numIdlingSlowUpdates = 0;
     public MoveType(Unit owner)
     {
         this.owner = owner;
-        goalPos = owner.pos;
-        oldPos = owner.pos;
-        oldSlowUpdatePos = oldPos;
-        maxSpeed = owner.moveDef.speed / Game.GAME_SPEED;
-        maxWantedSpeed = owner.moveDef.speed / Game.GAME_SPEED;
-
-        pathController = new PathController(owner);
-        currWayPoint = Vector3.zero;
-        nextWayPoint = Vector3.zero;
-        flatFrontDir = Vector3.forward;
-        lastAvoidanceDir = Vector3.zero;
-        wantedHeading = 0;
-        pushResistant = owner.moveDef.pushResistant;
-        canReverse = owner.moveDef.rSpeed > 0f;
-        maxReverseSpeed = owner.moveDef.rSpeed / Game.GAME_SPEED;
-        turnRate = Mathf.Clamp(owner.moveDef.turnRate, 1.0f, 32767.0f);
+        this.goalPos = owner.pos;
+        this.oldPos = owner.pos;
+        this.oldSlowUpdatePos = oldPos;
+        this.progressState = ProgressState.Done;
+        this.maxSpeed = owner.unitDef.speed / Game.GAME_SPEED;
+        this.maxWantedSpeed = owner.unitDef.speed / Game.GAME_SPEED;
+        this.pathController = new PathController(owner);
+        this.currWayPoint = Vector3.zero;
+        this.nextWayPoint = Vector3.zero;
+        this.flatFrontDir = Vector3.forward;
+        this.lastAvoidanceDir = Vector3.zero;
+        this.wantedHeading = 0;
+        pushResistant = owner.unitDef.pushResistant;
+        turnRate = Mathf.Max(owner.unitDef.turnRate, 1.0f);
         turnAccel = turnRate * 0.333f;
-        accRate = Mathf.Max(0.01f, owner.moveDef.maxAcc);
-        decRate = Mathf.Max(0.01f, owner.moveDef.maxDec);
-        ownerRadius = owner.moveDef.CalcFootPrintMinExteriorRadius();
+        accRate = Mathf.Max(0.01f, owner.unitDef.maxAcc);
+        decRate = Mathf.Max(0.01f, owner.unitDef.maxDec);
     }
     public void StartMoving(Vector3 moveGoalPos, float moveGoalRadius)
     {
-        float deltaRaidus = Mathf.Max(0f, ownerRadius - moveGoalRadius);
         goalPos = new Vector3(moveGoalPos.x, 0, moveGoalPos.z);
         goalRadius = moveGoalRadius;
-        extraRadius = owner.moveDef.TestMoveSquare(null, moveGoalPos, Vector3.zero, true, true) ? 0 : deltaRaidus;
-
-        atGoal = PathMathUtils.SqrDistance2D(owner.pos, moveGoalPos) < PathMathUtils.Square(goalRadius + extraRadius);
+        atGoal = PathMathUtils.SqrDistance2D(owner.pos, moveGoalPos) < PathMathUtils.Square(moveGoalRadius);
         atEndOfPath = false;
-
         progressState = ProgressState.Active;
-
         numIdlingUpdates = 0;
         numIdlingSlowUpdates = 0;
-
         currWayPointDist = 0f;
         prevWayPointDist = 0f;
-
         if (atGoal)
         {
             return;
@@ -132,10 +97,6 @@ public class MoveType
         if (pathID == 0)
         {
             pathID = GetNewPath();
-        }
-        if (pathID != 0)
-        {
-            PathManager.Instance().UpdatePath(owner, pathID);
         }
         nextObstacleAvoidanceFrame = Game.frameNum;
     }
@@ -161,17 +122,16 @@ public class MoveType
     }
     public int GetNewPath()
     {
-        int newPathID = 0;
-        if (PathMathUtils.SqrDistance2D(owner.pos, goalPos) <= PathMathUtils.Square(goalRadius + extraRadius))
+        if (PathMathUtils.SqrDistance2D(owner.pos, goalPos) <= PathMathUtils.Square(goalRadius))
         {
-            return newPathID;
+            return 0;
         }
-        newPathID = PathManager.Instance().RequestPath(owner, owner.moveDef, owner.pos, goalPos, goalRadius + extraRadius, true);
+        int newPathID = PathManager.Instance().RequestPath(owner, owner.moveDef, owner.pos, goalPos, goalRadius, true);
         if (newPathID != 0)
         {
             atGoal = false;
             atEndOfPath = false;
-            currWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0,    owner.pos, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
+            currWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0, owner.pos, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
             nextWayPoint = PathManager.Instance().NextWayPoint(owner, newPathID, 0, currWayPoint, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
 
             pathController.SetRealGoalPosition(newPathID, goalPos);
@@ -183,59 +143,143 @@ public class MoveType
         }
         return newPathID;
     }
-    public static Vector3 CalcSpeedVectorExclGravity(Unit owner, MoveType mt, float hAcc)
-    {
-        // LuaSyncedCtrl::SetUnitVelocity directly assigns
-        // to owner->speed which gets overridden below, so
-        // need to calculate hSpeedScale from it (not from
-        // currentSpeed) directly
-        return (owner.frontdir * (owner.speedw + hAcc));
-    }
     public bool Update()
     {
         int heading = owner.heading;
-
-        // these must be executed even when stunned (so
-        // units do not get buried by restoring terrain)
         UpdateOwnerAccelAndHeading();
-        UpdateOwnerPos(owner.speed, CalcSpeedVectorExclGravity(owner, this, deltaSpeed));
-        //HandleObjectCollisions();
-        //AdjustPosToWaterLine();
-        //return (OwnerMoved(heading, owner->pos - oldPos, float3(float3::cmp_eps(), float3::cmp_eps() * 1e-2f, float3::cmp_eps())));
-        return true;
+        UpdateOwnerPos(owner.speed, owner.frontdir * (owner.speedw + deltaSpeed));
+        HandleObjectCollisions();
+        return OwnerMoved(heading, owner.pos - oldPos, new Vector3(1e-4f, 1e-6f, 1e-4f));
+    }
+    public void SlowUpdate()
+    {
+        if (progressState == ProgressState.Active)
+        {
+            if (pathID != 0)
+            {
+                if (idling)
+                {
+                    numIdlingSlowUpdates = Mathf.Min(16, numIdlingSlowUpdates + 1);
+                }
+                else
+                {
+                    numIdlingSlowUpdates = Mathf.Max(0, numIdlingSlowUpdates - 1);
+                }
+                if (numIdlingUpdates > Game.CIRCLE_DIVS / 2 / turnRate)
+                {
+                    if (numIdlingSlowUpdates < 16)
+                    {
+                        ReRequestPath(true);
+                    }
+                    else
+                    {
+                        Failed();
+                    }
+                }
+            }
+            else
+            {
+                ReRequestPath(true);
+            }
+            if (wantRepath)
+            {
+                ReRequestPath(true);
+            }
+        }
+        if (owner.pos != oldSlowUpdatePos)
+        {
+            oldSlowUpdatePos = owner.pos;
+            int newMapSquare = Game.GetSquare(owner.pos);
+            if (newMapSquare != owner.mapSquare)
+            {
+                owner.mapSquare = newMapSquare;
+                owner.Block();
+            }
+            QuadField.Instance().MovedUnit(owner);
+        }
     }
     public void UpdateOwnerAccelAndHeading()
     {
-        if (owner.stunned)
-        {
-            ChangeSpeed(0, false);
-            return;
-        }
         FollowPath();
     }
-    // The distance the unit will move before stopping,
-    // starting from given speed and applying maximum
-    // brake rate.
-    public float BrakingDistance(float speed, float rate)
+    public void FollowPath()
+    {
+        if (WantToStop())
+        {
+            currWayPoint.y = -1.0f;
+            nextWayPoint.y = -1.0f;
+            ChangeHeading(owner.heading);
+            ChangeSpeed(0.0f);
+        }
+        else
+        {
+            prevWayPointDist = currWayPointDist;
+            currWayPointDist = PathMathUtils.Distance2D(currWayPoint, owner.pos);
+            float curGoalDistSq = PathMathUtils.SqrDistance2D(owner.pos, goalPos);
+            float minGoalDistSq = PathMathUtils.Square(goalRadius);
+            atGoal |= (curGoalDistSq <= minGoalDistSq);
+            if (!atGoal)
+            {
+                if (!idling)
+                {
+                    numIdlingUpdates = Mathf.Max(0, numIdlingUpdates - 1);
+                }
+                else
+                {
+                    numIdlingUpdates = Mathf.Min(32768, numIdlingUpdates + 1);
+                }
+            }
+            if (!atEndOfPath)
+            {
+                GetNextWayPoint();
+            }
+            else if (atGoal)
+            {
+                Arrived();
+            }
+            if (currWayPoint != owner.pos)
+            {
+                waypointDir = new Vector3(currWayPoint.x - owner.pos.x, 0, currWayPoint.z - owner.pos.z).normalized;
+            }
+            Vector3 rawWantedDir = waypointDir;
+            Vector3 modWantedDir = GetObstacleAvoidanceDir(rawWantedDir);
+            ChangeHeading(PathMathUtils.GetHeadingFromVector(modWantedDir.x, modWantedDir.z));
+            ChangeSpeed(maxWantedSpeed);
+        }
+    }
+    float BrakingDistance(float speed, float rate)
     {
         float time = speed / Mathf.Max(rate, 0.001f);
         float dist = 0.5f * rate * time * time;
         return dist;
     }
-    public void ChangeSpeed(float newWantedSpeed, bool wantReverse, bool fpsMode = false)
+    public void ChangeHeading(int newHeading)
     {
-        // round low speeds to zero
-        if ((wantedSpeed = newWantedSpeed) <= 0.0f && currentSpeed < 0.01f)
+        wantedHeading = newHeading;
+        int rawDeltaHeading = pathController.GetDeltaHeading(pathID, newHeading, owner.heading, turnRate, turnAccel, BrakingDistance(turnSpeed, turnAccel), ref turnSpeed);
+        owner.AddHeading(rawDeltaHeading);
+        flatFrontDir = new Vector3(owner.frontdir.x, 0, owner.frontdir.z).normalized;
+    }
+    public void UpdateOwnerPos(Vector3 oldSpeedVector, Vector3 newSpeedVector)
+    {
+    }
+    public void HandleObjectCollisions()
+    {
+    }
+    public bool OwnerMoved(int oldHeading, Vector3 posDif, Vector3 cmpEps)
+    {
+        return false;
+    }
+    public void ChangeSpeed(float newWantedSpeed)
+    {
+        wantedSpeed = newWantedSpeed;
+        if (wantedSpeed <= 0.0f && currentSpeed < 0.01f)
         {
             currentSpeed = 0.0f;
             deltaSpeed = 0.0f;
             return;
         }
-        // first calculate the "unrestricted" speed and acceleration
-        float targetSpeed = PathMathUtils.Mix(maxSpeed, maxReverseSpeed, wantReverse ? 1 : 0);
-        // don't move until we have an actual path, trying to hide queuing
-        // lag is too dangerous since units can blindly drive into objects,
-        // cliffs, etc. (requires the QTPFS idle-check in Update)
+        float targetSpeed = maxSpeed;
         if (currWayPoint.y == -1.0f && nextWayPoint.y == -1.0f)
         {
             targetSpeed = 0.0f;
@@ -244,63 +288,37 @@ public class MoveType
         {
             if (wantedSpeed > 0.0f)
             {
-                float groundSpeedMod = 1.0f;
                 float curGoalDistSq = PathMathUtils.SqrDistance2D(owner.pos, goalPos);
                 float minGoalDistSq = PathMathUtils.Square(BrakingDistance(currentSpeed, decRate));
-                Vector3 waypointDifFwd = waypointDir;
-                Vector3 waypointDifRev = -waypointDifFwd;
-                Vector3 waypointDif = PathMathUtils.MixVec3(waypointDifFwd, waypointDifRev, reversing ? 1 : 0);
+                Vector3 waypointDif = !reversing ? waypointDir : -waypointDir;
                 int turnDeltaHeading = owner.heading - PathMathUtils.GetHeadingFromVector(waypointDif.x, waypointDif.z);
-
-                bool startBraking = (curGoalDistSq <= minGoalDistSq && !fpsMode);
-
-                if (!fpsMode && turnDeltaHeading != 0) {
-                    // only auto-adjust speed for turns when not in FPS mode
-                    float reqTurnAngle = Mathf.Abs(180.0f * (owner.heading - wantedHeading) / 32768);
-                    float maxTurnAngle = (turnRate / (32768 * 2)) * 360.0f;
-                    float turnMaxSpeed = PathMathUtils.Mix(maxSpeed, maxReverseSpeed, reversing ? 1 : 0);
+                bool startBraking = curGoalDistSq <= minGoalDistSq;
+                if (turnDeltaHeading != 0)
+                {
+                    float reqTurnAngle = Mathf.Abs(180.0f * (owner.heading - wantedHeading) / (Game.CIRCLE_DIVS / 2));
+                    float maxTurnAngle = turnRate / Game.CIRCLE_DIVS * 360.0f;
+                    float turnMaxSpeed = !reversing ? maxSpeed : 0f;
                     float turnModSpeed = turnMaxSpeed;
                     if (reqTurnAngle != 0.0f)
                         turnModSpeed *= Mathf.Clamp(maxTurnAngle / reqTurnAngle, 0.1f, 1.0f);
                     if (waypointDir.sqrMagnitude > 0.1f)
                     {
-                        if (!owner.moveDef.turnInPlace)
+                        if (!owner.unitDef.turnInPlace)
                         {
-                            // never let speed drop below TIPSL, but limit TIPSL itself to turnMaxSpeed
-                            targetSpeed = Mathf.Clamp(turnModSpeed, Mathf.Min(owner.moveDef.turnInPlaceSpeedLimit, turnMaxSpeed), turnMaxSpeed);
+                            targetSpeed = Mathf.Clamp(turnModSpeed, Mathf.Min(owner.unitDef.turnInPlaceSpeedLimit, turnMaxSpeed), turnMaxSpeed);
                         }
-                        else
+                        else if (reqTurnAngle > owner.unitDef.turnInPlaceAngleLimit)
                         {
-                            targetSpeed = PathMathUtils.Mix(targetSpeed, turnModSpeed, (reqTurnAngle > owner.moveDef.turnInPlaceAngleLimit) ? 1.0f : 0.0f);
+                            targetSpeed = turnModSpeed;
                         }
                     }
                     if (atEndOfPath)
                     {
-                        // at this point, Update() will no longer call SetNextWayPoint()
-                        // and we must slow down to prevent entering an infinite circle
-                        // base ftt on maximum turning speed
-                        float absTurnSpeed = turnRate;
-                        float framesToTurn = 32768 * 2 / absTurnSpeed;
-                        targetSpeed = Mathf.Min(targetSpeed, (currWayPointDist * Mathf.PI) / framesToTurn);
+                        targetSpeed = Mathf.Min(targetSpeed, (currWayPointDist * Mathf.PI) / (Game.CIRCLE_DIVS / turnRate));
                     }
                 }
-                // now apply the terrain and command restrictions
-                // NOTE:
-                //   if wantedSpeed > targetSpeed, the unit will
-                //   not accelerate to speed > targetSpeed unless
-                //   its actual max{Reverse}Speed is also changed
-                //
-                //   raise wantedSpeed iff the terrain-modifier is
-                //   larger than 1 (so units still get their speed
-                //   bonus correctly), otherwise leave it untouched
-                //
-                //   disallow changing speed (except to zero) without
-                //   a path if not in FPS mode (FIXME: legacy PFS can
-                //   return path when none should exist, mantis3720)
-                wantedSpeed *= Mathf.Max(groundSpeedMod, 1.0f);
-                targetSpeed *= groundSpeedMod;
                 targetSpeed *= (1 - (startBraking ? 1 : 0));
-                targetSpeed *= ((1 - (WantToStop() ? 1 : 0)) > 0 || fpsMode) ? 1 : 0;
+                targetSpeed *= (1 - (WantToStop() ? 1 : 0));
                 targetSpeed = Mathf.Min(targetSpeed, wantedSpeed);
             }
             else
@@ -314,23 +332,13 @@ public class MoveType
             currentSpeed,
             accRate,
             decRate,
-            wantReverse,
+            false,
             reversing
         );
     }
     public bool WantToStop()
     {
         return pathID == 0 && atEndOfPath;
-    }
-    public void ChangeHeading(int newHeading)
-    {
-        // model rotational inertia (more realistic for ships)
-        int rawDeltaHeading = pathController.GetDeltaHeading(pathID, (wantedHeading = newHeading), owner.heading, turnRate, turnAccel, BrakingDistance(turnSpeed, turnAccel), ref turnSpeed);
-        int absDeltaHeading = rawDeltaHeading * (int)PathMathUtils.Sign(rawDeltaHeading);
-        //if (absDeltaHeading >= minScriptChangeHeading)
-        //    owner->script->ChangeHeading(rawDeltaHeading);
-        owner.AddHeading(rawDeltaHeading, !owner.upright, false);
-        flatFrontDir = new Vector3(owner.frontdir.x, 0, owner.frontdir.z).normalized;
     }
     public bool CanSetNextWayPoint()
     {
@@ -424,89 +432,8 @@ public class MoveType
             //TODO
         }
     }
-    public bool WantReverse(Vector3 wpDir, Vector3 ffDir)
+       public void GetNextWayPoint()
     {
-        return false;
-    }
-    public bool FollowPath()
-    {
-        bool wantReverse = false;
-
-        if (WantToStop())
-        {
-            currWayPoint.y = -1.0f;
-            nextWayPoint.y = -1.0f;
-            ChangeHeading(owner.heading);
-            ChangeSpeed(0.0f, false);
-        }
-        else
-        {
-            Vector3 opos = owner.pos;
-            Vector3 ovel = owner.speed;
-            Vector3 ffd = flatFrontDir;
-            Vector3 cwp = currWayPoint;
-            prevWayPointDist = currWayPointDist;
-            currWayPointDist = PathMathUtils.Distance2D(currWayPoint, opos);
-            {
-                // NOTE:
-                //   uses owner->pos instead of currWayPoint (ie. not the same as atEndOfPath)
-                //
-                //   if our first command is a build-order, then goal-radius is set to our build-range
-                //   and we cannot increase tolerance safely (otherwise the unit might stop when still
-                //   outside its range and fail to start construction)
-                //
-                //   units moving faster than <minGoalDist> elmos per frame might overshoot their goal
-                //   the last two atGoal conditions will just cause flatFrontDir to be selected as the
-                //   "wanted" direction when this happens
-                float curGoalDistSq = PathMathUtils.SqrDistance2D(opos, goalPos);
-                float minGoalDistSq = PathMathUtils.Square((goalRadius + extraRadius));
-                float spdGoalDistSq = PathMathUtils.Square(currentSpeed * 1.05f);
-                atGoal |= (curGoalDistSq <= minGoalDistSq);
-                atGoal |= ((curGoalDistSq <= spdGoalDistSq) && !reversing && (Vector3.Dot(ffd, goalPos - opos) > 0.0f && Vector3.Dot(ffd, goalPos - (opos + ovel)) <= 0.0f));
-                atGoal |= ((curGoalDistSq <= spdGoalDistSq) && reversing && (Vector3.Dot(ffd, goalPos - opos) < 0.0f && Vector3.Dot(ffd, goalPos - (opos + ovel)) >= 0.0f));
-            }
-            if (!atGoal)
-            {
-                numIdlingUpdates -= ((numIdlingUpdates > 0 ? 1 : 0) * (1 - (idling ? 1 : 0)));
-                numIdlingUpdates += ((numIdlingUpdates < 32768 ? 1 : 0) * (idling ? 1 : 0));
-            }
-
-            // atEndOfPath never becomes true when useRawMovement, except via StopMoving
-            if (!atEndOfPath)
-            {
-                SetNextWayPoint();
-            }
-            else
-            {
-                if (atGoal)
-                    Arrived();
-                else
-                    ReRequestPath(false);
-            }
-            // set direction to waypoint AFTER requesting it; should not be a null-vector
-            // do not compare y-components since these usually differ and only x&z matter
-            Vector3 waypointVec;
-            // float3 wpProjDists;
-
-            if (!PathMathUtils.Epscmp0001(cwp.x, opos.x) || !PathMathUtils.Epscmp0001(cwp.z, opos.z))
-            {
-                waypointVec = (cwp - opos);
-                waypointVec.y = 0f;
-                waypointDir = waypointVec / waypointVec.magnitude;
-                // wpProjDists = {math::fabs(waypointVec.dot(ffd)), 1.0f, math::fabs(waypointDir.dot(ffd))};
-            }
-            wantReverse = WantReverse(waypointDir, ffd);
-
-            // apply obstacle avoidance (steering), prevent unit from chasing its own tail if already at goal
-            var rawWantedDir = waypointDir * PathMathUtils.Sign(!wantReverse ? 1 : 0);
-            var modWantedDir = GetObstacleAvoidanceDir(PathMathUtils.MixVec3(ffd, rawWantedDir, !atGoal ? 1 : 0));
-            // const float3& modWantedDir = GetObstacleAvoidanceDir(mix(ffd, rawWantedDir, (!atGoal) && (wpProjDists.x > wpProjDists.y || wpProjDists.z < 0.995f)));
-
-            ChangeHeading(PathMathUtils.GetHeadingFromVector(modWantedDir.x, modWantedDir.z));
-            ChangeSpeed(maxWantedSpeed, wantReverse);
-        }
-        PathManager.Instance().UpdatePath(owner, pathID);
-        return wantReverse;
     }
     public Vector3 GetObstacleAvoidanceDir(Vector3 desiredDir)
     {
