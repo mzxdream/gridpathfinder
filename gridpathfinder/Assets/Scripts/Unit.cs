@@ -1,6 +1,4 @@
-﻿using System.Threading;
-using UnityEngine;
-using UnityEngine.Timeline;
+﻿using UnityEngine;
 
 public class Unit
 {
@@ -15,23 +13,11 @@ public class Unit
     public int allyteam = 0;
     public MoveDef moveDef;
     public Vector3 frontdir = Vector3.forward; //z-axis
-    public Vector3 rightdir = -Vector3.right; //x-axis
-    public Vector3 updir = Vector3.up; //y-axis
-
-
-
+    public Vector3 rightdir = -Vector3.right; //x-axis == frontdir.cross(updir)
+    public Vector3 updir = Vector3.up; //y-axis 简化下总是向上，实际应该根据地形的坡度来算
     //unit object
     public UnitDef unitDef;
     public MoveType moveType;
-    public bool stunned = false; //晕眩
-    public Vector3 midPos;
-    public Vector3 aimPos;
-    public Vector3 relMidPos;
-    public Vector3 relAimPos;
-    // if the updir is straight up or align to the ground vector
-    public bool upright = true;
-    public bool moving = false;
-    public int allyteam = 0;
     public Unit()
     {
     }
@@ -40,30 +26,15 @@ public class Unit
         speed = v;
         speedw = v.magnitude;
     }
-    public void AddHeading(int deltaHeading, bool useGroundNormal, bool useObjectNormal)
+    public void AddHeading(int deltaHeading)
     {
-        SetHeading(heading + deltaHeading, useGroundNormal, useObjectNormal);
+        SetHeading(heading + deltaHeading);
     }
-    public void SetHeading(int worldHeading, bool useGroundNormal, bool useObjectNormal)
+    public void SetHeading(int worldHeading)
     {
         heading = worldHeading;
-        UpdateDirVectors(useGroundNormal, useObjectNormal);
-        UpdateMidAndAimPos();
-    }
-    void UpdateDirVectors(bool useGroundNormal, bool useObjectNormal)
-    {
         updir = Vector3.up;
         frontdir = PathMathUtils.GetVectorFromHeading(heading);
         rightdir = Vector3.Cross(frontdir, updir).normalized;
-        frontdir = Vector3.Cross(updir, rightdir);
-    }
-    void UpdateMidAndAimPos()
-    {
-        midPos = GetObjectSpacePos(relMidPos);
-        aimPos = GetObjectSpacePos(relAimPos);
-    }
-    public Vector3 GetObjectSpacePos(Vector3 p)
-    {
-        return (pos + (frontdir * p.z + (rightdir * p.x) + (updir * p.y)));
     }
 }
