@@ -340,7 +340,7 @@ public class MoveType
     {
         return pathID == 0 && atEndOfPath;
     }
-    public bool CanSetNextWayPoint()
+    public bool CanGetNextWayPoint()
     {
         if (pathID == 0)
         {
@@ -351,50 +351,41 @@ public class MoveType
             Vector3 pos = owner.pos;
             Vector3 cwp = currWayPoint;
             Vector3 nwp = nextWayPoint;
-            if (PathManager.Instance().PathUpdated(pathID))
+            int dirSign = !reversing ? 1 : -1;
+            float turnFrames = Game.CIRCLE_DIVS / turnRate;
+            float turnRadius = (owner.speedw * turnFrames) / Mathf.PI;
+            float waypointDot = Mathf.Clamp(Vector3.Dot(waypointDir, flatFrontDir * dirSign), -1.0f, 1.0f);
+            if (currWayPointDist > turnRadius * 2.0f)
             {
-                cwp = PathManager.Instance().NextWayPoint(owner, pathID, 0, pos, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
-                nwp = PathManager.Instance().NextWayPoint(owner, pathID, 0, cwp, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
-            }
-            int dirSign = (int)PathMathUtils.Sign(!reversing ? 1f : 0f);
-            float absTurnSpeed = Mathf.Max(0.0001f, Mathf.Abs(turnSpeed));
-            float framesToTurn = 32768 * 2 / absTurnSpeed;
-            float turnRadius = Mathf.Max((currentSpeed * framesToTurn) / (2 * Mathf.PI), currentSpeed * 1.05f);
-            float waypointDot = Mathf.Clamp(Vector3.Dot(waypointDir, (flatFrontDir * dirSign)), -1.0f, 1.0f);
-            // wp outside turning circle
-            if (currWayPointDist > (turnRadius * 2.0f))
                 return false;
-            // wp inside but ~straight ahead and not reached within one tick
-            if (currWayPointDist > Mathf.Max(Game.SQUARE_SIZE * 1.0f, currentSpeed * 1.05f) && waypointDot >= 0.995f)
+            }
+            if (currWayPointDist > Game.SQUARE_SIZE && waypointDot > 0.995f)
+            {
                 return false;
-            {
-                // check the rectangle between pos and cwp for obstacles
-                // if still further than SS elmos from waypoint, disallow skipping
-                // note: can somehow cause units to move in circles near obstacles
-                // (mantis3718) if rectangle is too generous in size
-                float minSpeedMod = 0;
-                int maxBlockBit = 0;
-                bool rangeTest = owner.moveDef.TestMoveSquareRange(owner, Vector3.Min(cwp, pos), Vector3.Max(cwp, pos), owner.speed, true, true, true, ref minSpeedMod, ref maxBlockBit);
-                bool allowSkip = ((cwp - pos).sqrMagnitude <= PathMathUtils.Square(Game.SQUARE_SIZE));
-                // CanSetNextWayPoint may return true if (allowSkip || rangeTest)
-                if (!allowSkip && !rangeTest)
-                    return false;
             }
+            int xmin = Mathf.Min((int)cwp.x / Game.SQUARE_SIZE, (int)pos.x / Game.SQUARE_SIZE);
+            int xmax = Mathf.Max((int)cwp.x / Game.SQUARE_SIZE, (int)pos.x / Game.SQUARE_SIZE);
+            int zmin = Mathf.Min((int)cwp.z / Game.SQUARE_SIZE, (int)pos.z / Game.SQUARE_SIZE);
+            int zmax = Mathf.Max((int)cwp.z / Game.SQUARE_SIZE, (int)pos.z / Game.SQUARE_SIZE);
+            MoveDef ownerMD = owner.moveDef;
+            for (int x = xmin; x < xmax; x++)
             {
-                float curGoalDistSq = PathMathUtils.SqrDistance2D(currWayPoint, goalPos);
-                float minGoalDistSq = PathMathUtils.Square((goalRadius + extraRadius));
-
-                // trigger Arrived on the next Update (only if we have non-temporary waypoints)
-                // note:
-                //   coldet can (very rarely) interfere with this, causing it to remain false
-                //   a unit would then keep moving along its final waypoint-direction forever
-                //   if atGoal, so we require waypointDir to always be updated in FollowPath
-                //   (checking curr == next is not perfect, becomes true a waypoint too early)
-                //
-                // atEndOfPath |= (currWayPoint == nextWayPoint);
-                atEndOfPath |= (curGoalDistSq <= minGoalDistSq);
+                for (int z = zmin; z < zmax; z++)
+                {
+                    if (ownerMD.TestMoveSquare(owner, x, z, owner.speed, true, true, true))
+                    {
+                        continue;
+                    }
+                    if ((pos - cwp).sqrMagnitude > PathMathUtils.Square(Game.SQUARE_SIZE)
+                        && Vector3.Dot(pos - cwp, flatFrontDir) >= 0.0f)
+                    {
+                        return false;
+                    }
+                }
             }
-
+            float curGoalDistSq = PathMathUtils.SqrDistance2D(currWayPoint, goalPos);
+            float minGoalDistSq = PathMathUtils.Square(goalRadius);
+            atEndOfPath |= (curGoalDistSq <= minGoalDistSq);
             if (atEndOfPath)
             {
                 currWayPoint = goalPos;
@@ -404,24 +395,29 @@ public class MoveType
         }
         return true;
     }
-    public void SetNextWayPoint()
+    public void GetNextWayPoint()
     {
-        if (CanSetNextWayPoint())
+        if (CanGetNextWayPoint())
         {
-            pathController.SetTempGoalPosition(pathID, nextWayPoint);
             currWayPoint = nextWayPoint;
-            nextWayPoint = PathManager.Instance().NextWayPoint(owner, pathID, 0, currWayPoint, Mathf.Max(WAYPOINT_RADIUS, currentSpeed * 1.05f), true);
+            nextWayPoint = PathManager.Instance().NextWayPoint(owner, pathID, 0, currWayPoint, 1.25f * Game.SQUARE_SIZE, true);
         }
         if (nextWayPoint.x == -1.0f && nextWayPoint.z == -1.0f)
         {
             Failed();
-            return;
         }
-        var CWP_BLOCK_MASK = PathMathUtils.SquareIsBlocked(owner.moveDef, currWayPoint, owner);
-        var NWP_BLOCK_MASK = PathMathUtils.SquareIsBlocked(owner.moveDef, nextWayPoint, owner);
-        if ((CWP_BLOCK_MASK & (int)PathMathUtils.BlockTypes.BLOCK_STRUCTURE) == 0 && (NWP_BLOCK_MASK & (int)PathMathUtils.BlockTypes.BLOCK_STRUCTURE) == 0)
-            return;
-        ReRequestPath(false);
+        else
+        {
+            //var CWP_BLOCK_MASK = PathMathUtils.SquareIsBlocked(owner.moveDef, currWayPoint, owner);
+            //var NWP_BLOCK_MASK = PathMathUtils.SquareIsBlocked(owner.moveDef, nextWayPoint, owner);
+            //if ((CWP_BLOCK_MASK & CMoveMath::BLOCK_STRUCTURE) != 0 || (NWP_BLOCK_MASK & CMoveMath::BLOCK_STRUCTURE) != 0)
+            //{
+            //    // this can happen if we crushed a non-blocking feature
+            //    // and it spawned another feature which we cannot crush
+            //    // (eg.) --> repath
+            //    ReRequestPath(false);
+            //}
+        }
     }
     public void Arrived()
     {
@@ -429,98 +425,10 @@ public class MoveType
         {
             StopEngine();
             progressState = ProgressState.Done;
-            //TODO
         }
-    }
-       public void GetNextWayPoint()
-    {
     }
     public Vector3 GetObstacleAvoidanceDir(Vector3 desiredDir)
     {
-        if (WantToStop())
-            return flatFrontDir;
-
-        // Speed-optimizer. Reduces the times this system is run.
-        if (Game.frameNum < nextObstacleAvoidanceFrame)
-            return lastAvoidanceDir;
-        Vector3 avoidanceVec = Vector3.zero;
-        var avoidanceDir = desiredDir;
-        lastAvoidanceDir = desiredDir;
-        nextObstacleAvoidanceFrame = Game.frameNum + 1;
-        Unit avoider = owner;
-        MoveDef avoiderMD = avoider.moveDef;
-
-        // degenerate case: if facing anti-parallel to desired direction,
-        // do not actively avoid obstacles since that can interfere with
-        // normal waypoint steering (if the final avoidanceDir demands a
-        // turn in the opposite direction of desiredDir)
-        if (Vector3.Dot(avoider.frontdir, desiredDir) < 0.0f)
-            return lastAvoidanceDir;
-        float AVOIDER_DIR_WEIGHT = 1.0f;
-        float DESIRED_DIR_WEIGHT = 0.5f;
-        float LAST_DIR_MIX_ALPHA = 0.7f;
-        float MAX_AVOIDEE_COSINE = Mathf.Cos(120.0f * Mathf.PI / 180f);
-        // now we do the obstacle avoidance proper
-        // avoider always uses its never-rotated MoveDef footprint
-        // note: should increase radius for smaller turnAccel values
-        float avoidanceRadius = Mathf.Max(currentSpeed, 1.0f) * (avoider.radius * 2.0f);
-        float avoiderRadius = avoiderMD.CalcFootPrintMinExteriorRadius();
-
-        QuadFieldQuery qfQuery = new QuadFieldQuery();
-        QuadField.Instance().GetSolidsExact(qfQuery, avoider.pos, avoidanceRadius);
-
-        foreach (var avoidee in qfQuery.units)
-        {
-            MoveDef avoideeMD = avoidee.moveDef;
-            if (avoidee == owner)
-                continue;
-            bool avoideeMobile = true;
-            bool avoideeMovable = !avoideeMD.pushResistant;
-            Vector3 avoideeVector = (avoider.pos + avoider.speed) - (avoidee.pos + avoidee.speed);
-            // use the avoidee's MoveDef footprint as radius if it is mobile
-            // use the avoidee's Unit (not UnitDef) footprint as radius otherwise
-            float avoideeRadius = avoideeMD.CalcFootPrintMinExteriorRadius();
-            float avoidanceRadiusSum = avoiderRadius + avoideeRadius;
-            float avoidanceMassSum = avoider.mass + avoidee.mass;
-            float avoideeMassScale = avoidee.mass / avoidanceMassSum;
-            float avoideeDistSq = avoideeVector.sqrMagnitude;
-            float avoideeDist = Mathf.Sqrt(avoideeDistSq) + 0.01f;
-            // do not bother steering around idling MOBILE objects
-            // (since collision handling will just push them aside)
-            if (avoideeMovable)
-            {
-                if (!avoiderMD.avoidMobilesOnPath || (!avoidee.moving && avoidee.allyteam == avoider.allyteam))
-                    continue;
-            }
-            // ignore objects that are more than this many degrees off-center from us
-            // NOTE:
-            //   if MAX_AVOIDEE_COSINE is too small, then this condition can be true
-            //   one frame and false the next (after avoider has turned) causing the
-            //   avoidance vector to oscillate --> units with turnInPlace = true will
-            //   slow to a crawl as a result
-            if (Vector3.Dot(avoider.frontdir, -(avoideeVector / avoideeDist)) < MAX_AVOIDEE_COSINE)
-                continue;
-            if (avoideeDistSq >= PathMathUtils.Square(Mathf.Max(currentSpeed, 1.0f) * Game.GAME_SPEED + avoidanceRadiusSum))
-                continue;
-            if (avoideeDistSq >= PathMathUtils.SqrDistance2D(avoider.pos, goalPos))
-                continue;
-            float avoiderTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoidee.pos, avoider.rightdir) - Vector3.Dot(avoider.pos, avoider.rightdir));
-            float avoideeTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoider.pos, avoidee.rightdir) - Vector3.Dot(avoidee.pos, avoidee.rightdir));
-
-            // for mobile units, avoidance-response is modulated by angle
-            // between avoidee's and avoider's frontdir such that maximal
-            // avoidance occurs when they are anti-parallel
-            float avoidanceCosAngle = Mathf.Clamp(Vector3.Dot(avoider.frontdir, avoidee.frontdir), -1.0f, 1.0f);
-            float avoidanceResponse = (1.0f - avoidanceCosAngle) + 0.1f;
-            float avoidanceFallOff = (1.0f - Mathf.Min(1.0f, avoideeDist / (5.0f * avoidanceRadiusSum)));
-            if (avoidanceCosAngle < 0.0f)
-                avoiderTurnSign = Mathf.Max(avoiderTurnSign, avoideeTurnSign);
-            avoidanceDir = avoider.rightdir * AVOIDER_DIR_WEIGHT * avoiderTurnSign;
-            avoidanceVec += (avoidanceDir * avoidanceResponse * avoidanceFallOff * avoideeMassScale);
-        }
-        avoidanceDir = (PathMathUtils.MixVec3(desiredDir, avoidanceVec, DESIRED_DIR_WEIGHT)).normalized;
-        avoidanceDir = (PathMathUtils.MixVec3(avoidanceDir, lastAvoidanceDir, LAST_DIR_MIX_ALPHA)).normalized;
-        return (lastAvoidanceDir = avoidanceDir);
+        return Vector3.zero;
     }
-
 }
