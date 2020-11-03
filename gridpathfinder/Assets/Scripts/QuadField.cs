@@ -38,4 +38,7 @@ public class QuadField
             qfq.units.Add(unit);
         }
     }
+    public void MovedUnit(Unit unit)
+    {
+    }
 }

@@ -17,6 +17,11 @@ public class Unit
     //unit object
     public UnitDef unitDef;
     public MoveType moveType;
+
+    public int mapSquare; //地图上位置
+    public int mapPosX;
+    public int mapPosZ;
+    public Vector3 groundBlockPos;
     public Unit(Vector3 pos)
     {
         this.pos = pos;
@@ -26,6 +31,9 @@ public class Unit
         this.moveDef = new MoveDef();
         this.unitDef = new UnitDef();
         this.moveType = new MoveType(this);
+    }
+    public void Block()
+    {
     }
     public void SetVelocityAndSpeed(Vector3 v)
     {
