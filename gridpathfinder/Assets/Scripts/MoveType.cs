@@ -548,7 +548,21 @@ public class MoveType
     }
     public bool OwnerMoved(int oldHeading, Vector3 posDif, Vector3 cmpEps)
     {
-        return false;
+        //    if (posDif.equals(ZeroVector, cmpEps))
+        if (posDif.x < cmpEps.x && posDif.y < cmpEps.y && posDif.z < cmpEps.z)
+        {
+            owner.SetVelocityAndSpeed(Vector3.zero);
+            idling = true;
+            idling &= (currWayPoint.y != -1.0f && nextWayPoint.y != -1.0f);
+            idling &= (Mathf.Abs(owner.heading - oldHeading) < turnRate);
+            return false;
+        }
+        oldPos = owner.pos;
+        var ffd = flatFrontDir * posDif.sqrMagnitude * 0.5f;
+        var wpd = waypointDir * (((int)(!reversing ? 1 : 0) * 2) - 1);
+        idling = true;
+        idling &= (PathMathUtils.Square(currWayPointDist - prevWayPointDist) < Vector3.Dot(ffd, wpd));
+        return true;
     }
     public void ChangeSpeed(float newWantedSpeed)
     {
@@ -709,6 +723,69 @@ public class MoveType
     }
     public Vector3 GetObstacleAvoidanceDir(Vector3 desiredDir)
     {
-        return Vector3.zero;
+        if (WantToStop())
+            return Vector3.zero;
+        // Speed-optimizer. Reduces the times this system is run.
+        //if (Game.frameNum < nextObstacleAvoidanceFrame)
+        //    return lastAvoidanceDir;
+        Vector3 avoidanceVec = Vector3.zero;
+        Vector3 avoidanceDir = desiredDir;
+        lastAvoidanceDir = desiredDir;
+        nextObstacleAvoidanceFrame = Game.frameNum + 1;
+        var avoider = owner;
+        var avoiderMD = avoider.moveDef;
+        if (Vector3.Dot(avoider.frontdir, desiredDir) < 0.0f)
+            return lastAvoidanceDir;
+        const float AVOIDER_DIR_WEIGHT = 1.0f;
+        const float DESIRED_DIR_WEIGHT = 0.5f;
+        float MAX_AVOIDEE_COSINE = Mathf.Cos(120.0f * 0.017453292519943295f);
+        const float LAST_DIR_MIX_ALPHA = 0.7f;
+        float avoidanceRadius = Mathf.Max(currentSpeed, 1.0f) * (avoider.radius * 2.0f);
+        float avoiderRadius = FootPrintRadius(avoiderMD.xsize, avoiderMD.zsize, 1.0f);
+        QuadFieldQuery qfQuery = new QuadFieldQuery();
+        QuadField.Instance().GetSolidsExact(qfQuery, avoider.pos, avoidanceRadius);
+        foreach (var avoidee in qfQuery.units)
+        {
+            var avoideeMD = avoidee.moveDef;
+            var avoideeUD = avoidee.unitDef;
+            if (avoidee == owner)
+                continue;
+            bool avoideeMobile = true;
+            bool avoideeMovable = true;
+            Vector3 avoideeVector = (avoider.pos + avoider.speed) - (avoidee.pos + avoidee.speed);
+            float avoideeRadius = FootPrintRadius(avoideeMD.xsize, avoideeMD.zsize, 1.0f);
+            float avoidanceRadiusSum = avoiderRadius + avoideeRadius;
+            float avoidanceMassSum = avoider.unitDef.mass + avoidee.unitDef.mass;
+            float avoideeMassScale = avoideeMobile ? (avoidee.unitDef.mass / avoidanceMassSum) : 1.0f;
+            float avoideeDistSq = avoideeVector.sqrMagnitude;
+            float avoideeDist = Mathf.Sqrt(avoideeDistSq) + 0.01f;
+            if (avoideeMobile && avoideeMovable)
+            {
+                if (!avoiderMD.avoidMobilesOnPath || (!avoidee.IsMoving && avoidee.allyteam == avoider.allyteam))
+                {
+                    continue;
+                }
+            }
+            if (Vector3.Dot(avoider.frontdir, -(avoideeVector / avoideeDist)) < MAX_AVOIDEE_COSINE)
+                continue;
+            if (avoideeDistSq >= PathMathUtils.Square(Mathf.Max(currentSpeed, 1.0f) * Game.GAME_SPEED + avoidanceRadiusSum))
+                continue;
+            if (avoideeDistSq >= PathMathUtils.SqrDistance2D(avoider.pos, goalPos))
+                continue;
+            float avoiderTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoidee.pos, avoider.rightdir) - Vector3.Dot(avoider.pos, avoider.rightdir));
+            float avoideeTurnSign = -PathMathUtils.Sign(Vector3.Dot(avoider.pos, avoidee.rightdir) - Vector3.Dot(avoidee.pos, avoidee.rightdir));
+            float avoidanceCosAngle = Mathf.Clamp(Vector3.Dot(avoider.frontdir, avoidee.frontdir), -1.0f, 1.0f);
+            float avoidanceResponse = (1.0f - avoidanceCosAngle) + 0.1f;
+            float avoidanceFallOff = (1.0f - Mathf.Min(1.0f, avoideeDist / (5.0f * avoidanceRadiusSum)));
+            if (avoidanceCosAngle < 0.0f)
+                avoiderTurnSign = Mathf.Max(avoiderTurnSign, avoideeTurnSign);
+            avoidanceDir = avoider.rightdir * AVOIDER_DIR_WEIGHT * avoiderTurnSign;
+            avoidanceVec += (avoidanceDir * avoidanceResponse * avoidanceFallOff * avoideeMassScale);
+        }
+        // use a weighted combination of the desired- and the avoidance-directions
+        // also linearly smooth it using the vector calculated the previous frame
+        avoidanceDir = (PathMathUtils.MixVec3(desiredDir, avoidanceVec, DESIRED_DIR_WEIGHT)).normalized;
+        avoidanceDir = (PathMathUtils.MixVec3(avoidanceDir, lastAvoidanceDir, LAST_DIR_MIX_ALPHA)).normalized;
+        return (lastAvoidanceDir = avoidanceDir);
     }
 }
