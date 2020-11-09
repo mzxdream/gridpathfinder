@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Globalization;
 using UnityEngine;
 
 public class MoveType
@@ -262,9 +263,288 @@ public class MoveType
     }
     public void UpdateOwnerPos(Vector3 oldSpeedVector, Vector3 newSpeedVector)
     {
+        var oldSpeed = Mathf.Abs(Vector3.Dot(oldSpeedVector, flatFrontDir));
+        var newSpeed = Mathf.Abs(Vector3.Dot(newSpeedVector, flatFrontDir));
+        if (newSpeedVector != Vector3.zero)
+        {
+            owner.SetVelocityAndSpeed(newSpeedVector);
+            owner.Move(owner.speed, true);
+            if (!owner.moveDef.TestMoveSquare(owner, owner.pos, owner.speed, true, false, true))
+            {
+                bool updatePos = false;
+                for (int n = 1; n <= Game.SQUARE_SIZE; n++ )
+                {
+                    if (!updatePos && (updatePos = owner.moveDef.TestMoveSquare(owner, owner.pos + owner.rightdir * n, owner.speed, true, false, true)))
+                    {
+                        owner.Move(owner.pos + owner.rightdir * n, false);
+                        break;
+                    }
+                    if (!updatePos && (updatePos = owner.moveDef.TestMoveSquare(owner, owner.pos - owner.rightdir * n, owner.speed, true, false, true)))
+                    {
+                        owner.Move(owner.pos - owner.rightdir * n, false);
+                        break;
+                    }
+                }
+                if (!updatePos)
+                {
+                    owner.Move(owner.pos - newSpeedVector, false);
+                }
+            }
+        }
+        reversing = (Vector3.Dot(newSpeedVector, flatFrontDir) < 0.0f);
+        currentSpeed = newSpeed;
+        deltaSpeed = 0.0f;
+    }
+    float FootPrintRadius(int xs, int zs, float s)
+    {
+        return Mathf.Sqrt(xs * xs + zs * zs) * 0.5f * Game.SQUARE_SIZE * s;
     }
     public void HandleObjectCollisions()
     {
+        var collider = owner;
+        var colliderUD = collider.unitDef;
+        var colliderMD = collider.moveDef;
+        var colliderSpeed = collider.speedw;
+        var colliderRadius = FootPrintRadius(colliderMD.xsize, colliderMD.zsize, 0.75f);
+        HandleUnitCollisions(collider, colliderSpeed, colliderRadius, colliderUD, colliderMD);
+        bool squareChange = (Game.GetSquare(owner.pos + owner.speed) != Game.GetSquare(owner.pos));
+        //if (squareChange)
+        {
+            HandleStaticObjectCollision(owner, owner, owner.moveDef, colliderRadius, 0.0f, Vector3.zero, true, false, true);
+        }
+    }
+    public void HandleUnitCollisions(Unit collider, float colliderSpeed, float colliderRadius, UnitDef colliderUD, MoveDef colliderMD)
+    {
+        float searchRadius = colliderSpeed + (colliderRadius * 2.0f);
+        QuadFieldQuery qfQuery = new QuadFieldQuery();
+        QuadField.Instance().GetUnitsExact(qfQuery, collider.pos, searchRadius);
+        int dirSign = (int)PathMathUtils.Sign(!reversing ? 1f : 0f);
+        Vector3 crushImpulse = collider.speed * collider.unitDef.mass * dirSign;
+        foreach (var collidee in qfQuery.units)
+        {
+            if (collidee == collider) continue;
+            UnitDef collideeUD = collidee.unitDef;
+            MoveDef collideeMD = collidee.moveDef;
+            bool colliderMobile = true;
+            bool collideeMobile = true;// (collideeMD != NULL); // maybe true
+            bool unloadingCollidee = false;
+            bool unloadingCollider = false;
+            float collideeSpeed = collidee.speedw;
+            float collideeRadius = FootPrintRadius(collideeMD.xsize, collideeMD.zsize, 0.75f);
+            Vector3 separationVector = collider.pos - collidee.pos;
+            float separationMinDistSq = (colliderRadius + collideeRadius) * (colliderRadius + collideeRadius);
+            if ((separationVector.sqrMagnitude - separationMinDistSq) > 0.01f)
+                continue;
+            bool pushCollider = colliderMobile;
+            bool pushCollidee = collideeMobile;
+            //bool crushCollidee = false;
+            bool alliedCollision = false;
+            //teamHandler->Ally(collider->allyteam, collidee->allyteam) &&
+            //teamHandler->Ally(collidee->allyteam, collider->allyteam);
+            bool collideeYields = collider.IsMoving && !collidee.IsMoving;
+            bool ignoreCollidee = (collideeYields && alliedCollision);
+            //crushCollidee |= !alliedCollision;
+            //crushCollidee &= ((colliderSpeed * collider->mass) > (collideeSpeed * collidee->mass));
+
+            //if (crushCollidee && !CMoveMath::CrushResistant(*colliderMD, collidee))
+            //    collidee->Kill(collider, crushImpulse, true);
+
+            //if (pathController.IgnoreCollision(collider, collidee))
+            //    continue;
+            if (collideeMobile)
+            {
+                var gmt = collidee.moveType;
+                if (PathMathUtils.SqrDistance2D(collider.moveType.goalPos, collidee.moveType.goalPos) < Mathf.PI * Mathf.PI) //
+                {
+                    if (collider.IsMoving && collider.moveType.progressState == MoveType.ProgressState.Active)
+                    {
+                        if (collidee.moveType.progressState == MoveType.ProgressState.Done)
+                        {
+                            if (!collidee.IsMoving)
+                            {
+                                atEndOfPath = true; atGoal = true;
+                            }
+                            // We're in a traffic jam so ignore current way point and go directly to the next one
+                        }
+                        else if (collidee.moveType.progressState == MoveType.ProgressState.Active && gmt.currWayPoint == nextWayPoint)
+                        {
+                            currWayPoint.y = -1.0f;//重新选择下一个路点，交通繁忙
+                        }
+                    }
+                }
+            }
+            pushCollider = pushCollider && (alliedCollision || !collider.blockEnemyPushing);
+            pushCollidee = pushCollidee && (alliedCollision || !collidee.blockEnemyPushing);
+            //pushCollider = pushCollider && !collider.moveType.IsPushResistant();
+            //pushCollidee = pushCollidee && !collidee->moveType->IsPushResistant();
+            if (!collideeMobile || (!pushCollider && !pushCollidee))
+            {
+                // building (always axis-aligned, possibly has a yardmap)
+                // or semi-static collidee that should be handled as such
+                // this also handles two mutually push-resistant parties!
+                HandleStaticObjectCollision(
+                    collider,
+                    collidee,
+                    colliderMD,
+                    colliderRadius,
+                    collideeRadius,
+                    separationVector,
+                    (!atEndOfPath && !atGoal),
+                    false,
+                    false);
+                continue;
+            }
+            float colliderRelRadius = colliderRadius / (colliderRadius + collideeRadius);
+            float collideeRelRadius = collideeRadius / (colliderRadius + collideeRadius);
+            float collisionRadiusSum = (colliderRadius + collideeRadius);
+            float sepDistance = separationVector.magnitude + 0.1f;
+            float penDistance = Mathf.Max(collisionRadiusSum - sepDistance, 1.0f);
+            float sepResponse = Mathf.Min(Game.SQUARE_SIZE * 2.0f, penDistance * 0.5f);
+            Vector3 sepDirection = (separationVector / sepDistance);
+            Vector3 colResponseVec = new Vector3(sepDirection.x, 0, sepDirection.z) * sepResponse;
+            float
+                m1 = collider.unitDef.mass,
+                m2 = collidee.unitDef.mass,
+                v1 = Mathf.Max(1.0f, colliderSpeed),
+                v2 = Mathf.Max(1.0f, collideeSpeed),
+                c1 = 1.0f + (1.0f - Mathf.Abs(Vector3.Dot(collider.frontdir, -sepDirection))) * 5.0f,
+                c2 = 1.0f + (1.0f - Mathf.Abs(Vector3.Dot(collidee.frontdir, sepDirection))) * 5.0f,
+                s1 = m1 * v1 * c1,
+                s2 = m2 * v2 * c2,
+                r1 = s1 / (s1 + s2 + 1.0f),
+                r2 = s2 / (s1 + s2 + 1.0f);
+            // far from a realistic treatment, but works
+            float colliderMassScale = Mathf.Clamp(1.0f - r1, 0.01f, 0.99f);
+            float collideeMassScale = Mathf.Clamp(1.0f - r2, 0.01f, 0.99f);
+            float colliderSlideSign = Mathf.Sign(Vector3.Dot(separationVector, collider.rightdir));
+            float collideeSlideSign = Mathf.Sign(Vector3.Dot(-separationVector, collidee.rightdir));
+            Vector3 colliderPushVec = colResponseVec * colliderMassScale * (int)(!ignoreCollidee ? 1 : 0);
+            Vector3 collideePushVec = -colResponseVec * collideeMassScale;
+            Vector3 colliderSlideVec = collider.rightdir * colliderSlideSign * (1.0f / penDistance) * r2;
+            Vector3 collideeSlideVec = collidee.rightdir * collideeSlideSign * (1.0f / penDistance) * r1;
+            Vector3 colliderMoveVec = colliderPushVec + colliderSlideVec;
+            Vector3 collideeMoveVec = collideePushVec + collideeSlideVec;
+            if ((pushCollider || !pushCollidee) && colliderMobile)
+            {
+                if (colliderMD.TestMoveSquare(collider, collider.pos + colliderMoveVec, colliderMoveVec))
+                {
+                    collider.Move(colliderMoveVec, true);
+                }
+            }
+            if ((pushCollidee || !pushCollider) && collideeMobile)
+            {
+                if (collideeMD.TestMoveSquare(collidee, collidee.pos + collideeMoveVec, collideeMoveVec))
+                {
+                    collidee.Move(collideeMoveVec, true);
+                }
+            }
+        }
+    }
+    public void HandleStaticObjectCollision(Unit collider, Unit collidee, MoveDef colliderMD, float colliderRadius, float collideeRadius, Vector3 separationVector, bool canRequestPath, bool checkYardMap, bool checkTerrain)
+    {
+        if (checkTerrain && !collider.IsMoving)
+        {
+            return;
+        }
+        bool wantRequestPath = false;
+        if (checkYardMap || checkTerrain)
+        {
+            int xmid = (int)(collider.pos.x + collider.speed.x) / Game.SQUARE_SIZE;
+            int zmid = (int)(collider.pos.z + collider.speed.z) / Game.SQUARE_SIZE;
+            int xsh = colliderMD.xsizeh * ((checkYardMap || (checkTerrain && colliderMD.allowTerrainCollisions)) ? 1 : 0);
+            int zsh = colliderMD.zsizeh * ((checkYardMap || (checkTerrain && colliderMD.allowTerrainCollisions)) ? 1 : 0);
+            int xmin = Mathf.Min(-1, -xsh);
+            int xmax = Mathf.Max(1, xsh);
+            int zmin = Mathf.Min(-1, -zsh);
+            int zmax = Mathf.Max(1, zsh);
+            Vector3 strafeVec = Vector3.zero;
+            Vector3 bounceVec = Vector3.zero;
+            Vector3 sqrSumPosition = Vector3.zero; // .y is always 0
+            Vector3 sqrPenDistance = Vector3.zero; // .x = sum, .y = count
+            Vector3 speed2D = new Vector3(collider.speed.x, 0, collider.speed.z).normalized;
+            for (int z = zmin; z <= zmax; z++)
+            {
+                for (int x = xmin; x <= xmax; x++)
+                {
+                    int xabs = xmid + x;
+                    int zabs = zmid + z;
+                    if (checkTerrain)
+                    {
+                        //if (CMoveMath::GetPosSpeedMod(*colliderMD, xabs, zabs, speed2D) > 0.01f)
+                        //    continue;
+                    }
+                    else
+                    {
+                        if ((PathMathUtils.SquareIsBlocked(colliderMD, xabs, zabs, collider) & (int)PathMathUtils.BlockTypes.BLOCK_STRUCTURE) == 0)
+                            continue;
+                    }
+                    Vector3 squarePos = new Vector3(xabs * Game.SQUARE_SIZE + (Game.SQUARE_SIZE >> 1), collider.pos.y, zabs * Game.SQUARE_SIZE + (Game.SQUARE_SIZE >> 1));
+                    Vector3 squareVec = collider.pos - squarePos;
+                    if (Vector3.Dot(squareVec, collider.speed) > 0.0f)
+                        continue;
+                    // RHS magic constant is the radius of a square (sqrt(2*(SQUARE_SIZE>>1)*(SQUARE_SIZE>>1)))
+                    float squareColRadiusSum = colliderRadius + 5.656854249492381f;
+                    float squareSepDistance = Mathf.Sqrt(PathMathUtils.SqrDistance2D(collider.pos, squarePos)) + 0.1f;
+                    float squarePenDistance = Mathf.Min(squareSepDistance - squareColRadiusSum, 0.0f);
+                    bounceVec += (collider.rightdir * Vector3.Dot(collider.rightdir, squareVec / squareSepDistance));
+                    sqrPenDistance += new Vector3(squarePenDistance, 0, 1.0f);
+                    sqrSumPosition += new Vector3(squarePos.x, 0, squarePos.z);
+                }
+            }
+            if (sqrPenDistance.y > 0.0f)
+            {
+                sqrSumPosition.x /= sqrPenDistance.z;
+                sqrSumPosition.z /= sqrPenDistance.z;
+                sqrPenDistance.x /= sqrPenDistance.z;
+                float strafeSign = -PathMathUtils.Sign(Vector3.Dot(sqrSumPosition, collider.rightdir) - Vector3.Dot(collider.pos, collider.rightdir));
+                float strafeScale = Mathf.Min(Mathf.Max(currentSpeed * 0.0f, maxSpeed), Mathf.Max(0.1f, -sqrPenDistance.x * 0.5f));
+                float bounceScale = Mathf.Min(Mathf.Max(currentSpeed * 0.0f, maxSpeed), Mathf.Max(0.1f, -sqrPenDistance.x * 0.5f));
+                float fpsStrafeScale = (strafeScale / (strafeScale + bounceScale)) * maxSpeed;
+                float fpsBounceScale = (bounceScale / (strafeScale + bounceScale)) * maxSpeed;
+                strafeVec = collider.rightdir * strafeSign;
+                strafeVec = new Vector3(strafeVec.x, 0, strafeVec.z).normalized * strafeScale;
+                bounceVec = new Vector3(bounceVec.x, 0, bounceVec.z).normalized * bounceScale;
+                // if checkTerrain is true, test only the center square
+                if (colliderMD.TestMoveSquare(collider, collider.pos + strafeVec + bounceVec, collider.speed, checkTerrain, checkYardMap, checkTerrain))
+                {
+                    collider.Move(strafeVec + bounceVec, true);
+                }
+                else
+                {
+                    collider.Move(oldPos - collider.pos, wantRequestPath = true);
+                }
+            }
+            wantRequestPath = (strafeVec + bounceVec != Vector3.zero);
+        }
+        else
+        {
+            float colRadiusSum = colliderRadius + collideeRadius;
+            float sepDistance = separationVector.magnitude + 0.1f;
+            float penDistance = Mathf.Min(sepDistance - colRadiusSum, 0.0f);
+            float colSlideSign = -PathMathUtils.Sign(Vector3.Dot(collidee.pos, collider.rightdir) - Vector3.Dot(collider.pos, collider.rightdir));
+            float strafeScale = Mathf.Min(currentSpeed, Mathf.Max(0.0f, -penDistance * 0.5f));
+            float bounceScale = Mathf.Min(currentSpeed, Mathf.Max(0.0f, -penDistance)) * (1 - (checkYardMap ? 1 : 0));
+            Vector3 strafeVec = (collider.rightdir * colSlideSign) * strafeScale;
+            Vector3 bounceVec = (separationVector / sepDistance) * bounceScale;
+            if (colliderMD.TestMoveSquare(collider, collider.pos + strafeVec + bounceVec, collider.speed, true, true, true))
+            {
+                collider.Move(strafeVec + bounceVec, true);
+            }
+            else
+            {
+                if (Vector3.Dot(collider.frontdir, separationVector) < 0.25f)
+                {
+                    wantRequestPath = true;
+                    collider.Move(oldPos - collider.pos, true);
+                }
+            }
+            // same here
+            wantRequestPath |= (penDistance < 0.0f);
+        }
+        if (canRequestPath && wantRequestPath)
+        {
+            ReRequestPath(false);
+        }
     }
     public bool OwnerMoved(int oldHeading, Vector3 posDif, Vector3 cmpEps)
     {
