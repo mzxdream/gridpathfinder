@@ -22,6 +22,8 @@ public class Unit
     public int mapPosX;
     public int mapPosZ;
     public Vector3 groundBlockPos;
+    public bool blockEnemyPushing;
+    public bool IsMoving { get; set; }
     public Unit(Vector3 pos)
     {
         this.pos = pos;
@@ -39,6 +41,11 @@ public class Unit
     {
         speed = v;
         speedw = v.magnitude;
+    }
+    public void Move(Vector3 v, bool relative)
+    {
+        var dv = relative ? v : v - pos;
+        pos += dv;
     }
     public void AddHeading(int deltaHeading)
     {

@@ -38,6 +38,9 @@ public class QuadField
             qfq.units.Add(unit);
         }
     }
+    public void GetUnitsExact(QuadFieldQuery qfq, Vector3 pos, float radius, bool spherical = true)
+    {
+    }
     public void MovedUnit(Unit unit)
     {
     }
