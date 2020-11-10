@@ -1,6 +1,4 @@
-﻿using System;
-using System.Globalization;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class MoveType
 {
@@ -272,7 +270,7 @@ public class MoveType
             if (!owner.moveDef.TestMoveSquare(owner, owner.pos, owner.speed, true, false, true))
             {
                 bool updatePos = false;
-                for (int n = 1; n <= Game.SQUARE_SIZE; n++ )
+                for (int n = 1; n <= Game.SQUARE_SIZE; n++)
                 {
                     if (!updatePos && (updatePos = owner.moveDef.TestMoveSquare(owner, owner.pos + owner.rightdir * n, owner.speed, true, false, true)))
                     {
@@ -559,7 +557,7 @@ public class MoveType
         }
         oldPos = owner.pos;
         var ffd = flatFrontDir * posDif.sqrMagnitude * 0.5f;
-        var wpd = waypointDir * (((int)(!reversing ? 1 : 0) * 2) - 1);
+        var wpd = waypointDir * (!reversing ? 1 : -1);
         idling = true;
         idling &= (PathMathUtils.Square(currWayPointDist - prevWayPointDist) < Vector3.Dot(ffd, wpd));
         return true;
